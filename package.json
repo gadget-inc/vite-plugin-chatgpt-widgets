@@ -1,0 +1,58 @@
+{
+  "name": "vite-plugin-chatgpt-widgets",
+  "version": "0.0.3",
+  "files": [
+    "Readme.md",
+    "dist/**/*"
+  ],
+  "license": "MIT",
+  "repository": "github:gadget-inc/vite-plugin-chatgpt-widgets",
+  "homepage": "https://github.com/gadget-inc/vite-plugin-chatgpt-widgets",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "source": "src/index.ts",
+  "main": "dist/cjs/index.js",
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && mkdir -p dist/cjs dist/esm && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && echo '{\"type\": \"module\"}' > dist/esm/package.json && tsc -b tsconfig.cjs.json tsconfig.esm.json",
+    "watch": "tsc --watch --preserveWatchOutput",
+    "prepublishOnly": "pnpm build",
+    "prerelease": "gitpkg publish",
+    "lint": "pnpm lint:prettier && pnpm lint:eslint",
+    "lint:prettier": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --check \"(src|spec)/**/*.{js,ts,tsx}\"",
+    "lint:prettier:fix": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --write --check \"(src|spec)/**/*.{js,ts,tsx}\"",
+    "lint:eslint": "NODE_OPTIONS=\"--max-old-space-size=4096\" eslint --quiet --ext ts,tsx src spec",
+    "lint:fix": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --write --check \"(src|spec)/**/*.{js,ts,tsx}\" && eslint --ext ts,tsx --fix src spec"
+  },
+  "dependencies": {
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.15.1",
+    "@gadgetinc/eslint-config": "^0.6.1",
+    "@gadgetinc/prettier-config": "^0.4.0",
+    "@types/node": "^22.13.14",
+    "conditional-type-checks": "^1.0.6",
+    "eslint": "^8.57.0",
+    "execa": "^5.1.1",
+    "gitpkg": "github:airhorns/gitpkg#gitpkg-v1.0.0-beta.4-gitpkg-82083c3",
+    "playwright": "^1.56.0",
+    "prettier": "^2.8.8",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "typescript": "^5.8.5",
+    "vite": "^6.3.2",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@9.11.0+sha512.0a203ffaed5a3f63242cd064c8fb5892366c103e328079318f78062f24ea8c9d50bc6a47aa3567cabefd824d170e78fa2745ed1f16b132e16436146b7688f19b"
+}
