@@ -1,0 +1,14 @@
+node_modules
+.env
+.envrc.local
+yarn-error.log
+.yarn
+.pnpm
+*.tsbuildinfo
+.vscode/settings.json
+.DS_Store
+TODO
+.direnv
+.idea
+*.orig
+dist/
