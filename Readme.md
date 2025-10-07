@@ -43,6 +43,34 @@ export default function MyWidget() {
 }
 ```
 
+#### Optional: Root Layout Component
+
+You can optionally create a root layout component that will wrap all widgets. If a file named `root.tsx` (or `root.ts`, `root.jsx`, `root.js`) exists in the widgets directory, it will automatically wrap all other widget components:
+
+```tsx
+// web/chatgpt-widgets/root.tsx
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="root-layout">
+      <header>
+        <h1>Common Header</h1>
+      </header>
+      <main>{children}</main>
+      <footer>
+        <p>Common Footer</p>
+      </footer>
+    </div>
+  );
+}
+```
+
+The root layout component:
+
+- Must accept a `children` prop
+- Will automatically wrap every widget component
+- Is not exposed as a widget itself
+- Is optional - if not present, widgets render without a wrapper
+
 ### 3. Serve Widgets in Your Application
 
 #### Development Mode (with Vite Dev Server)

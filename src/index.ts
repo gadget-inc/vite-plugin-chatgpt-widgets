@@ -35,6 +35,9 @@ export interface ProductionViteBuild {
 }
 
 export type ViteHandle = ViteDevServer | ProductionViteBuild;
+
+const ROOT_WIDGET_NAME = "root";
+
 /**
  * Returns all widget files in the given directory, and their file contents
  **/
@@ -45,19 +48,15 @@ export async function getWidgets(widgetsDir: string, viteHandle: ViteHandle): Pr
     return [];
   }
 
-  const files = await fs.readdir(widgetsDirPath);
+  const files = await listWidgetFiles(widgetsDirPath);
   const widgets: WidgetInfo[] = [];
 
   for (const file of files) {
-    const ext = path.extname(file);
-    if ([".ts", ".tsx", ".js", ".jsx"].includes(ext)) {
-      const name = path.basename(file, ext);
-      widgets.push({
-        name,
-        filePath: path.join(widgetsDirPath, file),
-        content: await getWidgetHTML(name, viteHandle),
-      });
-    }
+    widgets.push({
+      name: file.name,
+      filePath: path.join(widgetsDirPath, file.path),
+      content: await getWidgetHTML(file.name, viteHandle),
+    });
   }
 
   return widgets;
@@ -231,15 +230,11 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): V
         return options;
       }
 
-      const files = await fs.readdir(widgetsDirPath);
+      const files = await listWidgetFiles(widgetsDirPath);
       const widgetEntries: Record<string, string> = {};
 
       for (const file of files) {
-        const ext = path.extname(file);
-        if ([".ts", ".tsx", ".js", ".jsx"].includes(ext)) {
-          const basename = path.basename(file, ext);
-          widgetEntries[`chatgpt-widget-${basename}`] = `virtual:chatgpt-widget-${basename}.html`;
-        }
+        widgetEntries[`chatgpt-widget-${file.name}`] = `virtual:chatgpt-widget-${file.name}.html`;
       }
 
       // Add widget entries to existing input
@@ -301,7 +296,34 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): V
           return;
         }
 
-        return `
+        // Check if a root layout component exists
+        let rootFile = "";
+        for (const ext of possibleExtensions) {
+          const candidatePath = path.join(widgetsDirPath, `root${ext}`);
+          if (await exists(candidatePath)) {
+            rootFile = `/${widgetsDir}/root${ext}`;
+            break;
+          }
+        }
+
+        // Generate the entrypoint with or without root layout wrapper
+        if (rootFile) {
+          return `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import Widget from '${widgetFile}';
+import RootLayout from '${rootFile}';
+
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('Root element not found');
+}
+
+const root = createRoot(container);
+root.render(React.createElement(RootLayout, null, React.createElement(Widget)));
+          `.trim();
+        } else {
+          return `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from '${widgetFile}';
@@ -313,7 +335,8 @@ if (!container) {
 
 const root = createRoot(container);
 root.render(React.createElement(Widget));
-        `.trim();
+          `.trim();
+        }
       }
 
       return null;
@@ -328,4 +351,28 @@ const exists = async (path: string) => {
   } catch (error) {
     return false;
   }
+};
+
+const listWidgetFiles = async (widgetsDir: string) => {
+  const widgetsDirPath = path.resolve(process.cwd(), widgetsDir);
+  const files = await fs.readdir(widgetsDirPath);
+  const results: {
+    path: string;
+    name: string;
+  }[] = [];
+
+  for (const file of files) {
+    const ext = path.extname(file);
+    if ([".ts", ".tsx", ".js", ".jsx"].includes(ext)) {
+      const name = path.basename(file, ext);
+      // Skip root.tsx as it's a layout wrapper, not a widget
+      if (name.toLowerCase() === ROOT_WIDGET_NAME) {
+        continue;
+      }
+
+      results.push({ path: path.join(widgetsDirPath, file), name });
+    }
+  }
+
+  return results;
 };
