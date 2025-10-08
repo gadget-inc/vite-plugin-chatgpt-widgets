@@ -14,6 +14,10 @@ import {
   WIDGETS_WITH_ROOT_DIR,
   BUILD_WITH_ROOT_DIR,
   MANIFEST_WITH_ROOT_PATH,
+  FIXTURE_REACT_ROUTER_DIR,
+  WIDGETS_REACT_ROUTER_DIR,
+  BUILD_REACT_ROUTER_DIR,
+  MANIFEST_REACT_ROUTER_PATH,
 } from "./fixtureDirs.js";
 
 describe("Integration Tests", () => {
@@ -392,6 +396,254 @@ describe("Integration Tests", () => {
 
         // Should contain substantial content (including root layout code)
         expect(jsContent.length).toBeGreaterThan(100);
+      });
+    });
+  });
+
+  describe("React Router v7 Integration", () => {
+    describe("Development Mode with React Router", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        devServer = await createServer({
+          root: FIXTURE_REACT_ROUTER_DIR,
+          configFile: path.join(FIXTURE_REACT_ROUTER_DIR, "vite.config.ts"),
+          server: {
+            port: 5177, // Use a different port
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should discover widgets in React Router project", async () => {
+        const widgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, { devServer });
+
+        expect(widgets).toHaveLength(2);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget"]);
+      });
+
+      it("should generate valid HTML for React Router widgets in dev mode", async () => {
+        const { content: html } = await getWidgetHTML("NavigationWidget", { devServer });
+
+        expect(html).toContain("<!DOCTYPE html>");
+        expect(html).toContain("<title>NavigationWidget Widget</title>");
+        expect(html).toContain('<div id="root"></div>');
+        expect(html).toContain('<script type="module"');
+        expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-NavigationWidget.js");
+      });
+
+      it("should generate HTML for both React Router widgets", async () => {
+        const { content: navWidgetHtml } = await getWidgetHTML("NavigationWidget", { devServer });
+        const { content: dataWidgetHtml } = await getWidgetHTML("DataWidget", { devServer });
+
+        expect(navWidgetHtml).toContain("NavigationWidget Widget");
+        expect(dataWidgetHtml).toContain("DataWidget Widget");
+
+        expect(navWidgetHtml).toContain("/@id/virtual:chatgpt-widget-NavigationWidget.js");
+        expect(dataWidgetHtml).toContain("/@id/virtual:chatgpt-widget-DataWidget.js");
+      });
+
+      it("should include all React Router widgets in getWidgets result", async () => {
+        const widgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, { devServer });
+
+        for (const widget of widgets) {
+          expect(widget.name).toBeTruthy();
+          expect(widget.filePath).toBeTruthy();
+          expect(widget.content).toContain("<!DOCTYPE html>");
+          expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
+          expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
+        }
+      });
+    });
+
+    describe("Production Mode with React Router", () => {
+      beforeAll(async () => {
+        // Clean any previous build
+        try {
+          await fs.rm(BUILD_REACT_ROUTER_DIR, { recursive: true, force: true });
+        } catch (error) {
+          // Ignore if directory doesn't exist
+        }
+
+        // Run Vite build
+        await execa("npx", ["vite", "build", "--config", "vite.config.ts"], {
+          cwd: FIXTURE_REACT_ROUTER_DIR,
+        });
+      });
+
+      it("should have created a manifest file after build", async () => {
+        const manifestExists = await fs
+          .stat(MANIFEST_REACT_ROUTER_PATH)
+          .then(() => true)
+          .catch(() => false);
+        expect(manifestExists).toBe(true);
+      });
+
+      it("should have widget entries in the manifest for React Router project", async () => {
+        const manifestContent = await fs.readFile(MANIFEST_REACT_ROUTER_PATH, "utf-8");
+        const manifest = JSON.parse(manifestContent);
+
+        expect(manifest).toHaveProperty("virtual:chatgpt-widget-NavigationWidget.html");
+        expect(manifest).toHaveProperty("virtual:chatgpt-widget-DataWidget.html");
+
+        expect(manifest["virtual:chatgpt-widget-NavigationWidget.html"].file).toBeTruthy();
+        expect(manifest["virtual:chatgpt-widget-DataWidget.html"].file).toBeTruthy();
+      });
+
+      it("should discover React Router widgets in production mode", async () => {
+        const widgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        expect(widgets).toHaveLength(2);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget"]);
+      });
+
+      it("should generate valid HTML for React Router widgets in production mode", async () => {
+        const { content: html } = await getWidgetHTML("NavigationWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        expect(html).toContain("<!DOCTYPE html>");
+        expect(html).toContain("<title>NavigationWidget Widget</title>");
+        expect(html).toContain('<div id="root"></div>');
+        expect(html).toContain('<script type="module"');
+        expect(html).not.toContain("virtual:");
+      });
+
+      it("should have built HTML files on disk for React Router widgets", async () => {
+        const manifestContent = await fs.readFile(MANIFEST_REACT_ROUTER_PATH, "utf-8");
+        const manifest = JSON.parse(manifestContent);
+
+        const widgetEntries = Object.entries(manifest).filter(([key]) => key.startsWith("virtual:chatgpt-widget-"));
+
+        for (const [, entry] of widgetEntries) {
+          const filePath = path.join(BUILD_REACT_ROUTER_DIR, (entry as any).file);
+          const fileExists = await fs
+            .stat(filePath)
+            .then(() => true)
+            .catch(() => false);
+          expect(fileExists).toBe(true);
+        }
+      });
+
+      it("should generate different HTML for different React Router widgets in production", async () => {
+        const { content: navWidgetHtml } = await getWidgetHTML("NavigationWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+        const { content: dataWidgetHtml } = await getWidgetHTML("DataWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        expect(navWidgetHtml).toContain("NavigationWidget Widget");
+        expect(dataWidgetHtml).toContain("DataWidget Widget");
+
+        expect(navWidgetHtml).not.toBe(dataWidgetHtml);
+      });
+
+      it("should include React Router widgets in getWidgets result with content", async () => {
+        const widgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        for (const widget of widgets) {
+          expect(widget.name).toBeTruthy();
+          expect(widget.filePath).toBeTruthy();
+          expect(widget.content).toContain("<!DOCTYPE html>");
+          expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
+          expect(widget.content).not.toContain("virtual:");
+          expect(widget.content).not.toContain("/@id/");
+        }
+      });
+
+      it("should have bundled JavaScript for React Router widgets with hashes", async () => {
+        const { content: html } = await getWidgetHTML("NavigationWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        const scriptMatch = html.match(/src="([^"]+)"/);
+        expect(scriptMatch).toBeTruthy();
+
+        const scriptSrc = scriptMatch![1];
+        expect(scriptSrc).toMatch(/\.js$/);
+
+        const relativePath = scriptSrc.replace("https://example.com/", "");
+        const scriptPath = path.join(BUILD_REACT_ROUTER_DIR, relativePath);
+        const scriptExists = await fs
+          .stat(scriptPath)
+          .then(() => true)
+          .catch(() => false);
+        expect(scriptExists).toBe(true);
+      });
+
+      it("should contain React Router code in bundled JavaScript", async () => {
+        const { content: html } = await getWidgetHTML("NavigationWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        const scriptMatch = html.match(/src="([^"]+)"/);
+        const scriptSrc = scriptMatch![1];
+
+        const relativePath = scriptSrc.replace("https://example.com/", "");
+        const scriptPath = path.join(BUILD_REACT_ROUTER_DIR, relativePath);
+
+        const jsContent = await fs.readFile(scriptPath, "utf-8");
+
+        // Should contain substantial content including React Router integration
+        expect(jsContent.length).toBeGreaterThan(100);
+      });
+    });
+
+    describe("Dev vs Production Consistency with React Router", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        devServer = await createServer({
+          root: FIXTURE_REACT_ROUTER_DIR,
+          configFile: path.join(FIXTURE_REACT_ROUTER_DIR, "vite.config.ts"),
+          server: {
+            port: 5178, // Use a different port
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should discover the same React Router widgets in dev and production", async () => {
+        const devWidgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, { devServer });
+        const prodWidgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        expect(devWidgets.map((w) => w.name).sort()).toEqual(prodWidgets.map((w) => w.name).sort());
+      });
+
+      it("should have similar HTML structure in dev and production for React Router widgets", async () => {
+        const { content: devHtml } = await getWidgetHTML("NavigationWidget", { devServer });
+        const { content: prodHtml } = await getWidgetHTML("NavigationWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        expect(devHtml).toContain("<!DOCTYPE html>");
+        expect(prodHtml).toContain("<!DOCTYPE html>");
+
+        expect(devHtml).toContain("<title>NavigationWidget Widget</title>");
+        expect(prodHtml).toContain("<title>NavigationWidget Widget</title>");
+
+        expect(devHtml).toContain('<div id="root"></div>');
+        expect(prodHtml).toContain('<div id="root"></div>');
+
+        expect(devHtml).toContain('<script type="module"');
+        expect(prodHtml).toContain('<script type="module"');
       });
     });
   });

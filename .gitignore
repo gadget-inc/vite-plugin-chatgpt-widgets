@@ -12,3 +12,8 @@ TODO
 .idea
 *.orig
 dist/
+
+# Fixture build outputs and generated files
+spec/fixtures/*/dist/
+spec/fixtures/*/build/
+spec/fixtures/*/.react-router/
