@@ -30,6 +30,12 @@ export default defineConfig({
   build: {
     manifest: true, // Required for production mode
   },
+  server: {
+    cors: {
+      // allow cross origin requests for development assets so the ChatGPT sandbox can access dev-time assets
+      origin: true,
+    },
+  },
 });
 ```
 
