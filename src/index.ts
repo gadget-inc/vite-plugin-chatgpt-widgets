@@ -5,6 +5,12 @@ import type { Plugin as VitePlugin, ResolvedConfig, ViteDevServer } from "vite";
 interface ChatGPTWidgetPluginOptions {
   /** Directory containing widget component files. Defaults to "web/chatgpt-widgets" */
   widgetsDir?: string;
+  /**
+   * Base URL for widget assets. Required if Vite's base config is not an absolute URL.
+   * Should include protocol and domain (e.g., "https://example.com/").
+   * Used to generate fully qualified URLs for assets in sandboxed iframes.
+   */
+  baseUrl?: string;
 }
 
 /**
@@ -24,6 +30,12 @@ export interface WidgetInfo {
   name: string;
   filePath: string;
   content: string;
+  source: "manifest" | "dev-server";
+}
+
+export interface DevelopmentViteBuild {
+  /** Vite development server for widget assets. Required in development for transforms. */
+  devServer: ViteDevServer;
 }
 
 /**
@@ -34,9 +46,44 @@ export interface ProductionViteBuild {
   manifestPath: string;
 }
 
-export type ViteHandle = ViteDevServer | ProductionViteBuild;
+export type ViteHandle = DevelopmentViteBuild | ProductionViteBuild;
 
 const ROOT_WIDGET_NAME = "root";
+const PLUGIN_NAME = "vite-chatgpt-widget";
+
+/**
+ * Checks if a URL is absolute (contains a protocol and domain)
+ */
+function isAbsoluteUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Transforms HTML to use absolute URLs for script and link tags
+ */
+function transformHtmlWithAbsoluteUrls(html: string, baseUrl: string): string {
+  // Ensure baseUrl ends with /
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+
+  // Transform script src attributes
+  html = html.replace(
+    /(<script[^>]+src=["'])\/([^"']+)(["'])/g,
+    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+  );
+
+  // Transform link href attributes (for modulepreload, stylesheets, etc.)
+  html = html.replace(
+    /(<link[^>]+href=["'])\/([^"']+)(["'])/g,
+    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+  );
+
+  return html;
+}
 
 /**
  * Returns all widget files in the given directory, and their file contents
@@ -52,10 +99,12 @@ export async function getWidgets(widgetsDir: string, viteHandle: ViteHandle): Pr
   const widgets: WidgetInfo[] = [];
 
   for (const file of files) {
+    const { content, source } = await getWidgetHTML(file.name, viteHandle);
     widgets.push({
       name: file.name,
       filePath: path.join(widgetsDirPath, file.path),
-      content: await getWidgetHTML(file.name, viteHandle),
+      content,
+      source,
     });
   }
 
@@ -70,88 +119,126 @@ export async function getWidgets(widgetsDir: string, viteHandle: ViteHandle): Pr
  *
  * The Vite plugin is the source of truth for the HTML structure.
  */
-export async function getWidgetHTML(widgetName: string, viteHandle?: ViteHandle): Promise<string> {
+export async function getWidgetHTML(
+  widgetName: string,
+  viteHandle: ViteHandle
+): Promise<{ content: string; source: WidgetInfo["source"] }> {
   // Check if this is a ViteDevServer (has pluginContainer)
-  const isViteDevServer = viteHandle && "pluginContainer" in viteHandle;
+  const isViteDevServer = viteHandle && "devServer" in viteHandle;
+
+  let html: string;
+  let source: WidgetInfo["source"];
 
   if (isViteDevServer) {
-    const vite = viteHandle;
+    const vite = viteHandle.devServer;
     const virtualModuleId = `virtual:chatgpt-widget-${widgetName}.html`;
 
-    try {
-      // Step 1: Use plugin container to resolve and load the raw HTML from our plugin
-      const resolved = await vite.pluginContainer.resolveId(virtualModuleId);
-      if (!resolved) {
-        throw new Error(`Failed to resolve virtual module: ${virtualModuleId}`);
-      }
+    // Step 1: Use plugin container to resolve and load the raw HTML from our plugin
+    const resolved = await vite.pluginContainer.resolveId(virtualModuleId);
+    if (!resolved) {
+      throw new Error(`Failed to resolve virtual module: ${virtualModuleId}`);
+    }
 
-      const loaded = await vite.pluginContainer.load(resolved.id);
-      if (!loaded || (typeof loaded === "string" ? !loaded : !loaded.code)) {
+    const loaded = await vite.pluginContainer.load(resolved.id);
+    if (!loaded || (typeof loaded === "string" ? !loaded : !loaded.code)) {
+      throw new Error(`Vite returned no content for widget '${widgetName}'. ` + `Make sure the widget file exists in web/chatgpt-widgets/`);
+    }
+
+    const rawHtml = typeof loaded === "string" ? loaded : loaded.code;
+    source = "dev-server";
+
+    // Step 2: Transform the HTML through Vite's HTML transformation pipeline
+    // This will process script tags, apply plugins, rewrite asset URLs, etc.
+    // Pass the virtual module ID as the URL so Vite knows the context
+    const transformedHtml = await vite.transformIndexHtml(virtualModuleId, rawHtml);
+
+    // rewrite src="virtual:chatgpt-widget-${widgetName}.js" to src="/@id/virtual:chatgpt-widget-${widgetName}.js"
+    html = transformedHtml.replace(/src="virtual:chatgpt-widget-/g, `src="/@id/virtual:chatgpt-widget-`);
+
+    const plugin = vite.config.plugins.find((plugin) => plugin.name === PLUGIN_NAME) as ChatGPTWidgetPlugin;
+    // Get explicit baseUrl from the plugin in the plugin options
+    const explicitBaseUrl = plugin.pluginOptions.baseUrl;
+
+    // Determine the effective base URL for transforming asset links
+    let effectiveBaseUrl: string | undefined;
+
+    if (explicitBaseUrl) {
+      if (!isAbsoluteUrl(explicitBaseUrl)) {
         throw new Error(
-          `Vite returned no content for widget '${widgetName}'. ` + `Make sure the widget file exists in web/chatgpt-widgets/`
+          `The passed chatGPTWidgetPlugin base URL "${explicitBaseUrl}" is not an absolute URL. ` +
+            `Please provide a URL with protocol and domain (e.g., "https://example.com/").`
         );
       }
+      // Use the explicit baseUrl provided
+      effectiveBaseUrl = explicitBaseUrl;
+    } else if (vite.config.base) {
+      if (!isAbsoluteUrl(vite.config.base)) {
+        throw new Error(
+          `The Vite base URL "${vite.config.base}" is not an absolute URL. ` +
+            `Please set Vite's 'base' config to an absolute URL (e.g., "https://example.com/").`
+        );
+      }
+      // Use the Vite base if it's absolute
+      effectiveBaseUrl = vite.config.base;
+    }
 
-      const rawHtml = typeof loaded === "string" ? loaded : loaded.code;
-
-      // Step 2: Transform the HTML through Vite's HTML transformation pipeline
-      // This will process script tags, apply plugins, rewrite asset URLs, etc.
-      // Pass the virtual module ID as the URL so Vite knows the context
-      const transformedHtml = await vite.transformIndexHtml(virtualModuleId, rawHtml);
-
-      // rewrite src="virtual:chatgpt-widget-${widgetName}.js" to src="/@id/virtual:chatgpt-widget-${widgetName}.js"
-      const finalHtml = transformedHtml.replace(/src="virtual:chatgpt-widget-/g, `src="/@id/virtual:chatgpt-widget-`);
-
-      return finalHtml;
-    } catch (error) {
+    // Validate that we have an absolute base URL for sandboxed iframes
+    if (!effectiveBaseUrl) {
       throw new Error(
-        `Failed to load widget '${widgetName}' using Vite. ` + `Error: ${error instanceof Error ? error.message : String(error)}`
+        `Widget HTML requires an absolute base URL for sandboxed iframes. ` +
+          `Either set Vite's 'base' config to an absolute URL (e.g., "https://example.com/"), ` +
+          `or provide a 'baseUrl' option when calling getWidgetHTML/getWidgets. ` +
+          `Current Vite base: ${vite.config.base || "(not set)"}, provided baseUrl: ${explicitBaseUrl || "(not set)"}`
       );
     }
+
+    // Transform the HTML with absolute URLs
+    html = transformHtmlWithAbsoluteUrls(html, effectiveBaseUrl);
+  } else {
+    // Production: Read the built HTML file using Vite's manifest
+    const manifestPath = path.resolve(process.cwd(), viteHandle.manifestPath ?? "dist/.vite/manifest.json");
+
+    // Read the Vite manifest to verify the widget was built
+    if (!(await exists(manifestPath))) {
+      throw new Error(
+        `Vite manifest not found at ${manifestPath}. ` +
+          `Make sure to build with manifest enabled: { build: { manifest: true } } in vite.config.ts`
+      );
+    }
+
+    const manifestContent = await fs.readFile(manifestPath, "utf-8");
+    const manifest = JSON.parse(manifestContent) as Record<string, { file: string }>;
+
+    // Look for the widget HTML file in the manifest
+    const virtualModuleId = `virtual:chatgpt-widget-${widgetName}.html`;
+    const manifestEntry = manifest[virtualModuleId];
+
+    if (!manifestEntry) {
+      throw new Error(
+        `Widget '${widgetName}' not found in Vite manifest. ` +
+          `Available entries: ${Object.keys(manifest).join(", ")}. ` +
+          `Make sure the widget exists and was included in the build.`
+      );
+    }
+
+    // The built HTML file is in the dist root with the virtual module ID as its name
+    // e.g., dist/virtual:chatgpt-widget-TestWidget.html
+    const buildDir = path.dirname(path.dirname(manifestPath)); // Go up from .vite to dist
+    const builtHtmlPath = path.join(buildDir, virtualModuleId);
+
+    if (!(await exists(builtHtmlPath))) {
+      throw new Error(
+        `Built widget HTML not found at ${builtHtmlPath}. ` +
+          `Expected HTML file to be generated during build. This may indicate a build issue.`
+      );
+    }
+
+    // Read the built HTML file
+    html = await fs.readFile(builtHtmlPath, "utf-8");
+    source = "manifest";
   }
 
-  // Production: Read the built HTML file using Vite's manifest
-  const options = viteHandle as ProductionViteBuild;
-  const manifestPath = path.resolve(process.cwd(), options.manifestPath || "dist/.vite/manifest.json");
-
-  // Read the Vite manifest to verify the widget was built
-  if (!(await exists(manifestPath))) {
-    throw new Error(
-      `Vite manifest not found at ${manifestPath}. ` +
-        `Make sure to build with manifest enabled: { build: { manifest: true } } in vite.config.ts`
-    );
-  }
-
-  const manifestContent = await fs.readFile(manifestPath, "utf-8");
-  const manifest = JSON.parse(manifestContent) as Record<string, { file: string }>;
-
-  // Look for the widget HTML file in the manifest
-  const virtualModuleId = `virtual:chatgpt-widget-${widgetName}.html`;
-  const manifestEntry = manifest[virtualModuleId];
-
-  if (!manifestEntry) {
-    throw new Error(
-      `Widget '${widgetName}' not found in Vite manifest. ` +
-        `Available entries: ${Object.keys(manifest).join(", ")}. ` +
-        `Make sure the widget exists and was included in the build.`
-    );
-  }
-
-  // The built HTML file is in the dist root with the virtual module ID as its name
-  // e.g., dist/virtual:chatgpt-widget-TestWidget.html
-  const buildDir = path.dirname(path.dirname(manifestPath)); // Go up from .vite to dist
-  const builtHtmlPath = path.join(buildDir, virtualModuleId);
-
-  if (!(await exists(builtHtmlPath))) {
-    throw new Error(
-      `Built widget HTML not found at ${builtHtmlPath}. ` +
-        `Expected HTML file to be generated during build. This may indicate a build issue.`
-    );
-  }
-
-  // Read and return the built HTML file
-  // Vite has already processed this and included all the correct asset URLs
-  return await fs.readFile(builtHtmlPath, "utf-8");
+  return { content: html, source };
 }
 
 /**
@@ -202,13 +289,15 @@ export function generateWidgetEntrypointHTML(widgetName: string): string {
   `.trim();
 }
 
-export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): VitePlugin {
+type ChatGPTWidgetPlugin = VitePlugin & { pluginOptions: ChatGPTWidgetPluginOptions };
+
+export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): ChatGPTWidgetPlugin {
   const widgetsDir = options.widgetsDir || "web/chatgpt-widgets";
   let config: ResolvedConfig;
   let viteRoot: string;
 
   return {
-    name: "vite-chatgpt-widget",
+    name: PLUGIN_NAME,
 
     config(config) {
       // Store the root for use in the options hook
@@ -218,6 +307,22 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): V
 
     configResolved(resolvedConfig: ResolvedConfig) {
       config = resolvedConfig;
+
+      // Validate that either plugin baseUrl or Vite's base is absolute
+      const pluginBaseUrl = options.baseUrl;
+      const viteBase = config.base;
+
+      const hasAbsolutePluginBaseUrl = pluginBaseUrl && isAbsoluteUrl(pluginBaseUrl);
+      const hasAbsoluteViteBase = viteBase && isAbsoluteUrl(viteBase);
+
+      if (!hasAbsolutePluginBaseUrl && !hasAbsoluteViteBase) {
+        throw new Error(
+          `vite-chatgpt-widget plugin requires an absolute base URL for sandboxed iframes. ` +
+            `Either set Vite's 'base' config to an absolute URL (e.g., base: "https://example.com/"), ` +
+            `or provide a 'baseUrl' option to the plugin (e.g., chatGPTWidgetPlugin({ baseUrl: "https://example.com" })). ` +
+            `Current Vite base: ${viteBase || "(not set)"}, plugin baseUrl: ${pluginBaseUrl || "(not set)"}`
+        );
+      }
     },
 
     async options(options) {
@@ -341,6 +446,8 @@ root.render(React.createElement(Widget));
 
       return null;
     },
+
+    pluginOptions: options,
   };
 }
 

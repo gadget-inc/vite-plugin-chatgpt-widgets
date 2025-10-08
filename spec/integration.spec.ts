@@ -5,16 +5,16 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import execa from "execa";
 import { getWidgets, getWidgetHTML } from "../src/index.js";
-
-const FIXTURE_DIR = path.resolve(__dirname, "fixtures/test-project");
-const WIDGETS_DIR = path.join(FIXTURE_DIR, "web/chatgpt-widgets");
-const BUILD_DIR = path.join(FIXTURE_DIR, "dist");
-const MANIFEST_PATH = path.join(BUILD_DIR, ".vite/manifest.json");
-
-const FIXTURE_WITH_ROOT_DIR = path.resolve(__dirname, "fixtures/test-project-with-root");
-const WIDGETS_WITH_ROOT_DIR = path.join(FIXTURE_WITH_ROOT_DIR, "web/chatgpt-widgets");
-const BUILD_WITH_ROOT_DIR = path.join(FIXTURE_WITH_ROOT_DIR, "dist");
-const MANIFEST_WITH_ROOT_PATH = path.join(BUILD_WITH_ROOT_DIR, ".vite/manifest.json");
+import {
+  FIXTURE_DIR,
+  WIDGETS_DIR,
+  BUILD_DIR,
+  MANIFEST_PATH,
+  FIXTURE_WITH_ROOT_DIR,
+  WIDGETS_WITH_ROOT_DIR,
+  BUILD_WITH_ROOT_DIR,
+  MANIFEST_WITH_ROOT_PATH,
+} from "./fixtureDirs.js";
 
 describe("Integration Tests", () => {
   describe("Development Mode", () => {
@@ -38,14 +38,14 @@ describe("Integration Tests", () => {
     });
 
     it("should discover widgets in dev mode", async () => {
-      const widgets = await getWidgets(WIDGETS_DIR, devServer);
+      const widgets = await getWidgets(WIDGETS_DIR, { devServer });
 
       expect(widgets).toHaveLength(2);
       expect(widgets.map((w) => w.name).sort()).toEqual(["AnotherWidget", "TestWidget"]);
     });
 
     it("should generate valid HTML for a widget in dev mode", async () => {
-      const html = await getWidgetHTML("TestWidget", devServer);
+      const { content: html } = await getWidgetHTML("TestWidget", { devServer });
 
       // Check basic HTML structure
       expect(html).toContain("<!DOCTYPE html>");
@@ -53,14 +53,14 @@ describe("Integration Tests", () => {
       expect(html).toContain("<title>TestWidget Widget</title>");
       expect(html).toContain('<div id="root"></div>');
 
-      // Check that the script tag is present and uses the /@id/ prefix for dev mode
+      // Check that the script tag is present and uses absolute URL
       expect(html).toContain('<script type="module"');
-      expect(html).toContain("/@id/virtual:chatgpt-widget-TestWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-TestWidget.js");
     });
 
     it("should generate different HTML for different widgets in dev mode", async () => {
-      const testWidgetHtml = await getWidgetHTML("TestWidget", devServer);
-      const anotherWidgetHtml = await getWidgetHTML("AnotherWidget", devServer);
+      const { content: testWidgetHtml } = await getWidgetHTML("TestWidget", { devServer });
+      const { content: anotherWidgetHtml } = await getWidgetHTML("AnotherWidget", { devServer });
 
       expect(testWidgetHtml).toContain("TestWidget Widget");
       expect(anotherWidgetHtml).toContain("AnotherWidget Widget");
@@ -72,20 +72,20 @@ describe("Integration Tests", () => {
     it("should generate HTML even for non-existent widgets in dev mode", async () => {
       // In dev mode, the HTML is always generated
       // The error only occurs when the JS module is loaded by the browser
-      const html = await getWidgetHTML("NonExistentWidget", devServer);
+      const { content: html } = await getWidgetHTML("NonExistentWidget", { devServer });
       expect(html).toContain("NonExistentWidget Widget");
-      expect(html).toContain("/@id/virtual:chatgpt-widget-NonExistentWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-NonExistentWidget.js");
     });
 
     it("should include all widgets in getWidgets result with content", async () => {
-      const widgets = await getWidgets(WIDGETS_DIR, devServer);
+      const widgets = await getWidgets(WIDGETS_DIR, { devServer });
 
       for (const widget of widgets) {
         expect(widget.name).toBeTruthy();
         expect(widget.filePath).toBeTruthy();
         expect(widget.content).toContain("<!DOCTYPE html>");
         expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
-        expect(widget.content).toContain("/@id/virtual:chatgpt-widget-");
+        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
       }
     });
   });
@@ -134,7 +134,7 @@ describe("Integration Tests", () => {
     });
 
     it("should generate valid HTML for a widget in production mode", async () => {
-      const html = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
+      const { content: html } = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
 
       // Check basic HTML structure
       expect(html).toContain("<!DOCTYPE html>");
@@ -163,8 +163,12 @@ describe("Integration Tests", () => {
     });
 
     it("should generate different HTML for different widgets in production mode", async () => {
-      const testWidgetHtml = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
-      const anotherWidgetHtml = await getWidgetHTML("AnotherWidget", { manifestPath: MANIFEST_PATH });
+      const { content: testWidgetHtml } = await getWidgetHTML("TestWidget", {
+        manifestPath: MANIFEST_PATH,
+      });
+      const { content: anotherWidgetHtml } = await getWidgetHTML("AnotherWidget", {
+        manifestPath: MANIFEST_PATH,
+      });
 
       expect(testWidgetHtml).toContain("TestWidget Widget");
       expect(anotherWidgetHtml).toContain("AnotherWidget Widget");
@@ -194,7 +198,7 @@ describe("Integration Tests", () => {
     });
 
     it("should have bundled JavaScript files with hashes", async () => {
-      const html = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
+      const { content: html } = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
 
       // Extract script src from HTML
       const scriptMatch = html.match(/src="([^"]+)"/);
@@ -205,8 +209,11 @@ describe("Integration Tests", () => {
       // Should be a JS file with a hash
       expect(scriptSrc).toMatch(/\.js$/);
 
+      // Strip the base URL to get the relative path
+      const relativePath = scriptSrc.replace("https://example.com/", "");
+
       // The file should exist
-      const scriptPath = path.join(BUILD_DIR, scriptSrc);
+      const scriptPath = path.join(BUILD_DIR, relativePath);
       const scriptExists = await fs
         .stat(scriptPath)
         .then(() => true)
@@ -215,12 +222,15 @@ describe("Integration Tests", () => {
     });
 
     it("should contain React rendering code in bundled JS", async () => {
-      const html = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
+      const { content: html } = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
 
       // Extract script src from HTML
       const scriptMatch = html.match(/src="([^"]+)"/);
       const scriptSrc = scriptMatch![1];
-      const scriptPath = path.join(BUILD_DIR, scriptSrc);
+
+      // Strip the base URL to get the relative path
+      const relativePath = scriptSrc.replace("https://example.com/", "");
+      const scriptPath = path.join(BUILD_DIR, relativePath);
 
       // Read the bundled JS
       const jsContent = await fs.readFile(scriptPath, "utf-8");
@@ -251,15 +261,15 @@ describe("Integration Tests", () => {
     });
 
     it("should discover the same widgets in dev and production", async () => {
-      const devWidgets = await getWidgets(WIDGETS_DIR, devServer);
+      const devWidgets = await getWidgets(WIDGETS_DIR, { devServer });
       const prodWidgets = await getWidgets(WIDGETS_DIR, { manifestPath: MANIFEST_PATH });
 
       expect(devWidgets.map((w) => w.name).sort()).toEqual(prodWidgets.map((w) => w.name).sort());
     });
 
     it("should have similar HTML structure in dev and production", async () => {
-      const devHtml = await getWidgetHTML("TestWidget", devServer);
-      const prodHtml = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
+      const { content: devHtml } = await getWidgetHTML("TestWidget", { devServer });
+      const { content: prodHtml } = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
 
       // Both should have basic HTML structure
       expect(devHtml).toContain("<!DOCTYPE html>");
@@ -298,7 +308,7 @@ describe("Integration Tests", () => {
       });
 
       it("should exclude root.tsx from widget discovery", async () => {
-        const widgets = await getWidgets(WIDGETS_WITH_ROOT_DIR, devServer);
+        const widgets = await getWidgets(WIDGETS_WITH_ROOT_DIR, { devServer });
 
         expect(widgets).toHaveLength(2);
         expect(widgets.map((w) => w.name).sort()).toEqual(["WidgetA", "WidgetB"]);
@@ -306,7 +316,7 @@ describe("Integration Tests", () => {
       });
 
       it("should generate HTML for widgets that uses root layout", async () => {
-        const html = await getWidgetHTML("WidgetA", devServer);
+        const { content: html } = await getWidgetHTML("WidgetA", { devServer });
 
         expect(html).toContain("<!DOCTYPE html>");
         expect(html).toContain("<title>WidgetA Widget</title>");
@@ -356,7 +366,7 @@ describe("Integration Tests", () => {
       });
 
       it("should generate valid HTML for widgets in production mode with root layout", async () => {
-        const html = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
+        const { content: html } = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
 
         expect(html).toContain("<!DOCTYPE html>");
         expect(html).toContain("<title>WidgetA Widget</title>");
@@ -365,14 +375,17 @@ describe("Integration Tests", () => {
       });
 
       it("should have bundled JavaScript that includes root layout", async () => {
-        const html = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
+        const { content: html } = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
 
         // Extract script src from HTML
         const scriptMatch = html.match(/src="([^"]+)"/);
         expect(scriptMatch).toBeTruthy();
 
         const scriptSrc = scriptMatch![1];
-        const scriptPath = path.join(BUILD_WITH_ROOT_DIR, scriptSrc);
+
+        // Strip the base URL to get the relative path
+        const relativePath = scriptSrc.replace("https://example.com/", "");
+        const scriptPath = path.join(BUILD_WITH_ROOT_DIR, relativePath);
 
         // Read the bundled JS
         const jsContent = await fs.readFile(scriptPath, "utf-8");

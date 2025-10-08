@@ -24,6 +24,7 @@ export default defineConfig({
   plugins: [
     chatGPTWidgetPlugin({
       widgetsDir: "web/chatgpt-widgets", // default: 'web/chatgpt-widgets'
+      baseUrl: "https://example.com", // required because the chatgpt iframe is sandboxed and absolute URL links are required
     }),
   ],
   build: {
@@ -114,12 +115,69 @@ for (const widget of widgets) {
 import { getWidgetHTML } from "vite-plugin-chatgpt-widgets";
 
 // Pass production options (or omit for defaults)
-const widgets = await getWidgets("web/chatgpt-widgets", { manifestPath: "dist/.vite/manifest.json" });
+const widgets = await getWidgets("web/chatgpt-widgets", {
+  manifestPath: "dist/.vite/manifest.json",
+  baseUrl: "https://example.com", // required for sandbox-safe iframe links (see below)
+});
 
 for (const widget of widgets) {
   // ...
 }
 ```
+
+### Sandboxed iFrames & Fully Qualified URLs
+
+**⚠️ Required:** When serving widgets in sandboxed iframes like ChatGPT's UI, asset links **must** be fully qualified URLs with protocol and domain. The plugin enforces this requirement and will throw an error if an absolute base URL is not configured.
+
+You must configure an absolute base URL in one of these ways:
+
+1. **Vite's `base` config is an absolute URL**: If you've already configured Vite with `base: "https://example.com/"`, the plugin will use it automatically.
+
+```typescript
+// Option 1: In Vite config (affects both dev and build)
+export default defineConfig({
+  plugins: [chatGPTWidgetPlugin({})],
+  base: "https://example.com",
+});
+
+// and when calling getWidgets in production
+const widgets = await getWidgets("web/chatgpt-widgets", {
+  manifestPath: "dist/.vite/manifest.json",
+  baseUrl: "https://example.com",
+});
+```
+
+2. **Provide `baseUrl` option**: If Vite's `base` is relative (or not set), provide the `baseUrl` option to the plugin or the production build configuration:
+
+```typescript
+// Option 1: In Vite config (affects both dev and build)
+export default defineConfig({
+  plugins: [
+    chatGPTWidgetPlugin({
+      baseUrl: "https://example.com",
+    }),
+  ],
+  base: "/",
+});
+
+// Option 2: When calling getWidgets in production
+const widgets = await getWidgets("web/chatgpt-widgets", {
+  manifestPath: "dist/.vite/manifest.json",
+  baseUrl: "https://example.com",
+});
+```
+
+**How it works:**
+
+- The plugin transforms relative asset URLs like `/assets/widget-abc123.js` to `https://example.com/assets/widget-abc123.js`
+- Only the entry `<script>` and `<link>` tags in the HTML are transformed
+- ES module imports within JavaScript files remain relative (correct behavior - the browser resolves them relative to the parent module's URL)
+
+**Validation:**
+
+- At build time: The plugin validates that either Vite's `base` or the plugin's `baseUrl` option is an absolute URL
+- At runtime: `getWidgets()` and `getWidgetHTML()` validate that an absolute base URL is available from either Vite's config or the provided `baseUrl` option
+- If validation fails, an error is thrown with clear instructions on how to fix it
 
 ## How It Works
 
@@ -142,6 +200,7 @@ The Vite plugin.
 **Options:**
 
 - `widgetsDir` (string, optional): Directory containing widget components. Default: `'web/chatgpt-widgets'`
+- `baseUrl` (string, optional): Base URL for widget assets. Required if Vite's `base` config is not an absolute URL and you need fully qualified URLs for sandboxed iframes. Should include protocol and domain (e.g., `"https://example.com"`). Note: Does not require trailing slash.
 
 ### `getWidgets(widgetsDir, viteHandle)`
 
@@ -150,9 +209,11 @@ Get the HTML content for a widget.
 **Parameters:**
 
 - `widgetsDir` (string): The path to the directory on disk with your widget components
-- `viteOrOptions` (ViteDevServer | ProductionViteBuild): A reference to a Vite context we can use for getting widget content.
+- `viteHandle` (ViteDevServer | ProductionViteBuild): A reference to a Vite context we can use for getting widget content.
   - In dev: Pass the Vite dev server instance
-  - In prod: Pass a `{ manifestPath: "path/to/.vite/manifest.json" }` where your production build has happened
+  - In prod: Pass an object with:
+    - `manifestPath` (string): Path to the Vite manifest.json file (e.g., `"dist/.vite/manifest.json"`)
+    - `baseUrl` (string, optional): Base URL for assets if Vite's `base` is not absolute
 
 ## Architecture
 

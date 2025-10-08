@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [
     chatGPTWidgetPlugin({
       widgetsDir: "web/chatgpt-widgets",
+      baseUrl: "https://example.com",
     }),
   ],
   build: {
