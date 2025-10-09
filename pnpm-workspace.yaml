@@ -1,0 +1,6 @@
+packages:
+  # Root package (the plugin itself)
+  - "."
+  # Test fixture projects
+  - "spec/fixtures/*"
+

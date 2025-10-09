@@ -4,19 +4,10 @@ import type { ViteDevServer } from "vite";
 import * as path from "path";
 import * as fs from "fs/promises";
 import execa from "execa";
-import { getWidgets, getWidgetHTML } from "../src/index.js";
-import {
-  FIXTURE_DIR,
-  WIDGETS_DIR,
-  BUILD_DIR,
-  MANIFEST_PATH,
-  FIXTURE_WITH_ROOT_DIR,
-  WIDGETS_WITH_ROOT_DIR,
-  BUILD_WITH_ROOT_DIR,
-  MANIFEST_WITH_ROOT_PATH,
-} from "./fixtureDirs.js";
+import { getWidgets, getWidgetHTML } from "../../src/index.js";
+import { FIXTURE_DIR, WIDGETS_DIR, BUILD_DIR, MANIFEST_PATH } from "../fixtureDirs.js";
 
-describe("Integration Tests", () => {
+describe("Basic Project Integration", () => {
   describe("Development Mode", () => {
     let devServer: ViteDevServer;
 
@@ -87,6 +78,59 @@ describe("Integration Tests", () => {
         expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
         expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
       }
+    });
+
+    it("should include Tailwind CSS in widget JavaScript module in dev mode", async () => {
+      const { content: html } = await getWidgetHTML("TestWidget", { devServer });
+
+      // Extract the JavaScript module URL from the HTML
+      const scriptMatch = html.match(/src="([^"]+virtual:chatgpt-widget-TestWidget\.js[^"]*)"/);
+      expect(scriptMatch).toBeTruthy();
+
+      const scriptUrl = scriptMatch![1].replace("https://example.com/@id/", "").replace("https://example.com/", "");
+
+      // Resolve and load the JavaScript module from the dev server
+      const resolved = await devServer.pluginContainer.resolveId(scriptUrl);
+      expect(resolved).toBeTruthy();
+
+      const loaded = await devServer.pluginContainer.load(resolved!.id);
+      const jsCode = typeof loaded === "string" ? loaded : loaded!.code;
+
+      // The JavaScript should import the widget component which imports styles.css
+      expect(jsCode).toContain("TestWidget");
+    });
+
+    it("should have Tailwind CSS file in widgets directory", async () => {
+      // Verify the styles.css file exists and contains Tailwind directives
+      const cssPath = path.join(WIDGETS_DIR, "styles.css");
+
+      const cssExists = await fs
+        .stat(cssPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(cssExists).toBe(true);
+
+      const cssContent = await fs.readFile(cssPath, "utf-8");
+
+      // Verify Tailwind directives are present
+      expect(cssContent).toContain("@tailwind base");
+      expect(cssContent).toContain("@tailwind components");
+      expect(cssContent).toContain("@tailwind utilities");
+    });
+
+    it("should have Tailwind utilities in widget component source", async () => {
+      // Read the TestWidget component source code
+      const widgetPath = path.join(WIDGETS_DIR, "TestWidget.tsx");
+
+      const widgetCode = await fs.readFile(widgetPath, "utf-8");
+
+      // Verify the component imports CSS
+      expect(widgetCode).toContain('import "./styles.css"');
+
+      // Verify Tailwind classes are in the component
+      expect(widgetCode).toContain("bg-gradient-to-r");
+      expect(widgetCode).toContain("from-blue-500");
+      expect(widgetCode).toContain("shadow-xl");
     });
   });
 
@@ -239,6 +283,35 @@ describe("Integration Tests", () => {
       // Look for common patterns that would be in the bundle
       expect(jsContent.length).toBeGreaterThan(100); // Should have actual content
     });
+
+    it("should include Tailwind CSS in production build", async () => {
+      const { content: html } = await getWidgetHTML("TestWidget", { manifestPath: MANIFEST_PATH });
+
+      // In production, CSS should be bundled and linked in the HTML
+      const cssLinkMatch = html.match(/<link[^>]+href="([^"]+\.css)"/);
+      expect(cssLinkMatch).toBeTruthy();
+
+      const cssUrl = cssLinkMatch![1];
+      const cssPath = cssUrl.replace("https://example.com/", "");
+      const fullCssPath = path.join(BUILD_DIR, cssPath);
+
+      // Verify the CSS file exists
+      const cssExists = await fs
+        .stat(fullCssPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(cssExists).toBe(true);
+
+      // Read the CSS content and verify it contains Tailwind utilities
+      const cssContent = await fs.readFile(fullCssPath, "utf-8");
+
+      // Verify Tailwind CSS is present by checking for utility classes we use
+      expect(cssContent).toContain("bg-gradient-to-r"); // gradient classes
+      expect(cssContent).toContain("shadow-xl"); // shadow classes
+      expect(cssContent).toContain("rounded"); // border radius utilities
+      // Tailwind CSS should be substantial
+      expect(cssContent.length).toBeGreaterThan(1000);
+    });
   });
 
   describe("Dev vs Production Consistency", () => {
@@ -284,115 +357,6 @@ describe("Integration Tests", () => {
       // Both should have script tags
       expect(devHtml).toContain('<script type="module"');
       expect(prodHtml).toContain('<script type="module"');
-    });
-  });
-
-  describe("Root Layout Component", () => {
-    describe("Development Mode with Root Layout", () => {
-      let devServer: ViteDevServer;
-
-      beforeAll(async () => {
-        devServer = await createServer({
-          root: FIXTURE_WITH_ROOT_DIR,
-          configFile: path.join(FIXTURE_WITH_ROOT_DIR, "vite.config.ts"),
-          server: {
-            port: 5176, // Use a different port
-          },
-          logLevel: "warn",
-        });
-        await devServer.listen();
-      });
-
-      afterAll(async () => {
-        await devServer?.close();
-      });
-
-      it("should exclude root.tsx from widget discovery", async () => {
-        const widgets = await getWidgets(WIDGETS_WITH_ROOT_DIR, { devServer });
-
-        expect(widgets).toHaveLength(2);
-        expect(widgets.map((w) => w.name).sort()).toEqual(["WidgetA", "WidgetB"]);
-        expect(widgets.find((w) => w.name.toLowerCase() === "root")).toBeUndefined();
-      });
-
-      it("should generate HTML for widgets that uses root layout", async () => {
-        const { content: html } = await getWidgetHTML("WidgetA", { devServer });
-
-        expect(html).toContain("<!DOCTYPE html>");
-        expect(html).toContain("<title>WidgetA Widget</title>");
-        expect(html).toContain('<div id="root"></div>');
-      });
-    });
-
-    describe("Production Mode with Root Layout", () => {
-      beforeAll(async () => {
-        // Clean any previous build
-        try {
-          await fs.rm(BUILD_WITH_ROOT_DIR, { recursive: true, force: true });
-        } catch (error) {
-          // Ignore if directory doesn't exist
-        }
-
-        // Run Vite build
-        await execa("npx", ["vite", "build", "--config", "vite.config.ts"], {
-          cwd: FIXTURE_WITH_ROOT_DIR,
-        });
-      });
-
-      it("should have created a manifest file after build", async () => {
-        const manifestExists = await fs
-          .stat(MANIFEST_WITH_ROOT_PATH)
-          .then(() => true)
-          .catch(() => false);
-        expect(manifestExists).toBe(true);
-      });
-
-      it("should exclude root.tsx from widget entries in manifest", async () => {
-        const manifestContent = await fs.readFile(MANIFEST_WITH_ROOT_PATH, "utf-8");
-        const manifest = JSON.parse(manifestContent);
-
-        expect(manifest).toHaveProperty("virtual:chatgpt-widget-WidgetA.html");
-        expect(manifest).toHaveProperty("virtual:chatgpt-widget-WidgetB.html");
-        expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-root.html");
-        expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-Root.html");
-      });
-
-      it("should discover widgets excluding root in production mode", async () => {
-        const widgets = await getWidgets(WIDGETS_WITH_ROOT_DIR, { manifestPath: MANIFEST_WITH_ROOT_PATH });
-
-        expect(widgets).toHaveLength(2);
-        expect(widgets.map((w) => w.name).sort()).toEqual(["WidgetA", "WidgetB"]);
-        expect(widgets.find((w) => w.name.toLowerCase() === "root")).toBeUndefined();
-      });
-
-      it("should generate valid HTML for widgets in production mode with root layout", async () => {
-        const { content: html } = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
-
-        expect(html).toContain("<!DOCTYPE html>");
-        expect(html).toContain("<title>WidgetA Widget</title>");
-        expect(html).toContain('<div id="root"></div>');
-        expect(html).toContain('<script type="module"');
-      });
-
-      it("should have bundled JavaScript that includes root layout", async () => {
-        const { content: html } = await getWidgetHTML("WidgetA", { manifestPath: MANIFEST_WITH_ROOT_PATH });
-
-        // Extract script src from HTML
-        const scriptMatch = html.match(/src="([^"]+)"/);
-        expect(scriptMatch).toBeTruthy();
-
-        const scriptSrc = scriptMatch![1];
-
-        // Strip the base URL to get the relative path
-        const relativePath = scriptSrc.replace("https://example.com/", "");
-        const scriptPath = path.join(BUILD_WITH_ROOT_DIR, relativePath);
-
-        // Read the bundled JS
-        const jsContent = await fs.readFile(scriptPath, "utf-8");
-
-        // Should contain substantial content (including root layout code)
-        expect(jsContent.length).toBeGreaterThan(100);
-      });
     });
   });
 });

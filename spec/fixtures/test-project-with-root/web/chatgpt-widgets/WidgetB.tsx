@@ -1,7 +1,7 @@
-import React from "react";
+import { useState } from "react";
 
 export default function WidgetB() {
-  const [count, setCount] = React.useState(0);
+  const [count, setCount] = useState(0);
 
   return (
     <div className="widget-b">

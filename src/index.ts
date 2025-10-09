@@ -73,13 +73,13 @@ function transformHtmlWithAbsoluteUrls(html: string, baseUrl: string): string {
   // Transform script src attributes
   html = html.replace(
     /(<script[^>]+src=["'])\/([^"']+)(["'])/g,
-    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+    (_match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
   );
 
   // Transform link href attributes (for modulepreload, stylesheets, etc.)
   html = html.replace(
     /(<link[^>]+href=["'])\/([^"']+)(["'])/g,
-    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+    (_match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
   );
 
   return html;
@@ -411,10 +411,20 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
           }
         }
 
+        // Check if React Router is present (for HMR runtime injection)
+        const hasReactRouter = config.plugins.some((plugin) => plugin.name === "react-router" || plugin.name.includes("react-router"));
+
+        // In dev mode with React Router, inject the HMR runtime import
+        // Note: @vitejs/plugin-react preamble is handled in the HTML
+        let hmrRuntimeSetup = "";
+        if (config.command === "serve" && hasReactRouter) {
+          hmrRuntimeSetup = `import "virtual:react-router/inject-hmr-runtime";\n`;
+        }
+
         // Generate the entrypoint with or without root layout wrapper
         if (rootFile) {
           return `
-import React from 'react';
+${hmrRuntimeSetup}import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from '${widgetFile}';
 import RootLayout from '${rootFile}';
@@ -429,7 +439,7 @@ root.render(React.createElement(RootLayout, null, React.createElement(Widget)));
           `.trim();
         } else {
           return `
-import React from 'react';
+${hmrRuntimeSetup}import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from '${widgetFile}';
 
@@ -445,6 +455,65 @@ root.render(React.createElement(Widget));
       }
 
       return null;
+    },
+
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        // Only transform our widget HTML files
+        if (!ctx.filename || !ctx.filename.includes("chatgpt-widget-")) {
+          return html;
+        }
+
+        // In dev mode, inject preamble for React Fast Refresh
+        if (config.command === "serve") {
+          const hasViteReact = config.plugins.some((plugin) => plugin.name === "vite:react-babel" || plugin.name === "vite:react-refresh");
+          const hasReactRouter = config.plugins.some((plugin) => plugin.name === "react-router" || plugin.name.includes("react-router"));
+
+          if (hasReactRouter) {
+            // For React Router widgets, inject polyfills for the global variables
+            // that the React Router HMR runtime expects but won't exist in standalone widgets
+            html = html.replace(
+              /<head>/,
+              `<head>
+    <script>
+      // React Router HMR polyfills for standalone widgets
+      // These globals are normally set up by HydratedRouter but we need them for HMR
+      if (typeof window !== 'undefined') {
+        // Minimal polyfill for the data router - just enough to not crash HMR
+        window.__reactRouterDataRouter = {
+          revalidate: async () => { /* no-op for standalone widgets */ },
+          createRoutesForHMR: () => [],
+          _internalSetRoutes: () => { /* no-op */ }
+        };
+        window.__reactRouterManifest = { routes: {} };
+        window.__reactRouterRouteModules = {};
+        window.__reactRouterContext = { ssr: false, isSpaMode: true };
+        window.__reactRouterHdrActive = false;
+        window.__reactRouterRouteModuleUpdates = new Map();
+      }
+    </script>`
+            );
+          } else if (hasViteReact) {
+            // Only inject for plain React (not React Router)
+            html = html.replace(
+              /<head>/,
+              `<head>
+    <script>
+      // React refresh preamble for @vitejs/plugin-react
+      // These must be defined before React components load
+      if (typeof window !== 'undefined') {
+        window.__vite_plugin_react_preamble_installed__ = true;
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+      }
+    </script>`
+            );
+          }
+        }
+
+        return html;
+      },
     },
 
     pluginOptions: options,

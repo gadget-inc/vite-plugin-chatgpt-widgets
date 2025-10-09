@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-chatgpt-widgets",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "files": [
     "Readme.md",
     "dist/**/*"
@@ -23,11 +23,14 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm -r --filter './spec/fixtures/*' typecheck",
     "build": "rm -rf dist && mkdir -p dist/cjs dist/esm && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && echo '{\"type\": \"module\"}' > dist/esm/package.json && tsc -b tsconfig.cjs.json tsconfig.esm.json",
     "watch": "tsc --watch --preserveWatchOutput",
     "prepublishOnly": "pnpm build",
     "prerelease": "gitpkg publish",
+    "debug:widget": "node debug-widget.mjs",
+    "debug:react-router": "node debug-widget.mjs test-project-react-router SimpleWidget",
+    "debug:plain-react": "node debug-widget.mjs test-project-plain-react CounterWidget",
     "lint": "pnpm lint:prettier && pnpm lint:eslint",
     "lint:prettier": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --check \"(src|spec)/**/*.{js,ts,tsx}\"",
     "lint:prettier:fix": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --write --check \"(src|spec)/**/*.{js,ts,tsx}\"",
@@ -46,6 +49,7 @@
     "eslint": "^8.57.0",
     "execa": "^5.1.1",
     "gitpkg": "github:airhorns/gitpkg#gitpkg-v1.0.0-beta.4-gitpkg-82083c3",
+    "playwright": "1.54.1",
     "prettier": "^2.8.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
