@@ -323,7 +323,7 @@ describe("React Router v7 Integration", () => {
       const scriptMatch = devHtml.match(/src="([^"]+virtual:chatgpt-widget-SimpleWidget\.js[^"]*)"/);
       expect(scriptMatch).toBeTruthy();
 
-      // Fetch the JavaScript module from the dev server to verify it contains the HMR runtime import
+      // Fetch the JavaScript module from the dev server to verify it contains the React Router HMR runtime
       const scriptUrl = scriptMatch![1].replace("https://example.com/@id/", "").replace("https://example.com/", "");
 
       const resolved = await devServer.pluginContainer.resolveId(scriptUrl);
@@ -334,6 +334,10 @@ describe("React Router v7 Integration", () => {
 
       // The generated JavaScript should import the React Router HMR runtime
       expect(jsCode).toContain('import "virtual:react-router/inject-hmr-runtime"');
+
+      // Verify it's a proper React component entrypoint
+      expect(jsCode).toContain("import React from 'react'");
+      expect(jsCode).toContain("createRoot");
     });
   });
 
@@ -590,5 +594,180 @@ describe("React Router v7 Integration", () => {
       }
     }, 30000); // 30 second timeout for browser tests
   });
-});
 
+  describe("HMR Tests", () => {
+    let devServer: ViteDevServer;
+
+    beforeAll(async () => {
+      devServer = await createServer({
+        root: FIXTURE_REACT_ROUTER_DIR,
+        configFile: path.join(FIXTURE_REACT_ROUTER_DIR, "vite.config.ts"),
+        server: {
+          port: 5182,
+        },
+        logLevel: "warn",
+      });
+      await devServer.listen();
+    });
+
+    afterAll(async () => {
+      await devServer?.close();
+    });
+
+    it("should connect Vite client and accept HMR updates for React Router widgets", async () => {
+      const { content: html } = await getWidgetHTML("SimpleWidget", { devServer });
+
+      const tempHtmlPath = path.join(BUILD_REACT_ROUTER_DIR, "test-widget-hmr.html");
+
+      // Since we're in dev mode, rewrite URLs to point to the dev server
+      let localHtml = html.replace(/https:\/\/example\.com\//g, "http://localhost:5182/");
+      // Make relative imports like /@react-refresh absolute too
+      localHtml = localHtml.replace(/from\s+"\/(@[^"]+)"/g, 'from "http://localhost:5182/$1"');
+      await fs.writeFile(tempHtmlPath, localHtml);
+
+      // Serve just this one HTML file (assets will be loaded from dev server)
+      const { createServer: createHttpServer } = await import("http");
+      const { readFile: fsReadFile } = await import("fs/promises");
+
+      const server = createHttpServer((req, res) => {
+        void (async () => {
+          try {
+            const content = await fsReadFile(tempHtmlPath);
+            res.writeHead(200, {
+              "Content-Type": "text/html",
+              "Access-Control-Allow-Origin": "*",
+            });
+            res.end(content);
+          } catch (error) {
+            res.writeHead(404);
+            res.end("Not found");
+          }
+        })();
+      });
+
+      const port = 5183;
+      await new Promise<void>((resolve) => {
+        server.listen(port, resolve);
+      });
+
+      const widgetPath = path.join(WIDGETS_REACT_ROUTER_DIR, "SimpleWidget.tsx");
+      let originalContent: string;
+
+      try {
+        const { chromium } = await import("playwright");
+        const browser = await chromium.launch();
+        const page = await browser.newPage();
+
+        const consoleMessages: string[] = [];
+        const consoleErrors: string[] = [];
+        const pageErrors: Error[] = [];
+
+        page.on("console", (msg: { type: () => string; text: () => string }) => {
+          const text = msg.text();
+          consoleMessages.push(text);
+          if (msg.type() === "error") {
+            consoleErrors.push(text);
+            console.log("Console error:", text);
+          }
+        });
+
+        page.on("pageerror", (err: Error) => {
+          pageErrors.push(err);
+          console.log("Page error:", err.message);
+          console.log("Stack:", err.stack);
+        });
+
+        await page.goto(`http://localhost:${port}/`);
+
+        // Wait for JavaScript to execute
+        await page.waitForTimeout(500);
+
+        // Log any initial errors
+        if (pageErrors.length > 0) {
+          console.log(
+            "Initial page errors:",
+            pageErrors.map((e) => e.message)
+          );
+        }
+        if (consoleErrors.length > 0) {
+          console.log("Initial console errors:", consoleErrors);
+        }
+
+        // Verify initial content is visible
+        const initialHeading = await page.textContent("h1");
+        expect(initialHeading).toBe("Simple Widget");
+
+        // Check that Vite client connected (look for Vite-related messages)
+        const hasViteConnection = consoleMessages.some((msg) => msg.includes("[vite]") || msg.includes("connected"));
+        console.log("Console messages during init:", consoleMessages.slice(0, 5));
+        expect(hasViteConnection).toBe(true);
+
+        // Read original content
+        originalContent = await fs.readFile(widgetPath, "utf-8");
+
+        // Modify the component to change the heading AND the paragraph text
+        let modifiedContent = originalContent.replace(
+          '<h1 className="text-4xl font-bold text-cyan-900 mb-3">Simple Widget</h1>',
+          '<h1 className="text-4xl font-bold text-cyan-900 mb-3">Simple Widget (HMR Updated)</h1>'
+        );
+        modifiedContent = modifiedContent.replace(
+          '<p className="text-cyan-700 mb-2">This is a simple widget for testing React Router HMR integration.</p>',
+          '<p className="text-cyan-700 mb-2">HMR is working!</p>'
+        );
+        await fs.writeFile(widgetPath, modifiedContent);
+
+        console.log("Modified component file, waiting for HMR update...");
+
+        // Give Vite a moment to detect the file change
+        await page.waitForTimeout(300);
+
+        // Wait for HMR update to be applied
+        // The page should update automatically without full reload
+        try {
+          await page.waitForFunction(
+            () => {
+              const para = document.querySelector(".text-cyan-700");
+              return para?.textContent === "HMR is working!";
+            },
+            { timeout: 5000 }
+          );
+        } catch (error) {
+          console.log("HMR update did not appear.");
+          console.log("Current heading:", await page.textContent("h1"));
+          console.log("Current paragraph:", await page.textContent(".text-cyan-700"));
+          console.log("Recent console messages:", consoleMessages.slice(-10));
+          console.log("Console errors:", consoleErrors);
+          console.log(
+            "Page errors:",
+            pageErrors.map((e) => e.message)
+          );
+          throw error;
+        }
+
+        // Verify the updates appeared
+        const updatedHeading = await page.textContent("h1");
+        const updatedPara = await page.textContent(".text-cyan-700");
+        expect(updatedHeading).toBe("Simple Widget (HMR Updated)");
+        expect(updatedPara).toBe("HMR is working!");
+
+        // Verify no console errors during HMR
+        const filteredErrors = consoleErrors.filter((e) => !e.includes("Download the React DevTools"));
+        if (filteredErrors.length > 0) {
+          console.log("Console errors during HMR test:", filteredErrors);
+        }
+        expect(filteredErrors).toHaveLength(0);
+
+        await browser.close();
+      } finally {
+        // Restore original content
+        if (originalContent!) {
+          await fs.writeFile(widgetPath, originalContent);
+        }
+        await fs.unlink(tempHtmlPath).catch(() => {
+          /* ignore */
+        });
+        server.close();
+      }
+    }, 15000);
+  });
+});

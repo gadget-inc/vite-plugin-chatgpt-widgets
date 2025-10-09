@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-chatgpt-widgets",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "files": [
     "Readme.md",
     "dist/**/*"
@@ -28,6 +28,9 @@
     "watch": "tsc --watch --preserveWatchOutput",
     "prepublishOnly": "pnpm build",
     "prerelease": "gitpkg publish",
+    "debug:widget": "node debug-widget.mjs",
+    "debug:react-router": "node debug-widget.mjs test-project-react-router SimpleWidget",
+    "debug:plain-react": "node debug-widget.mjs test-project-plain-react CounterWidget",
     "lint": "pnpm lint:prettier && pnpm lint:eslint",
     "lint:prettier": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --check \"(src|spec)/**/*.{js,ts,tsx}\"",
     "lint:prettier:fix": "NODE_OPTIONS=\"--max-old-space-size=4096\" prettier --write --check \"(src|spec)/**/*.{js,ts,tsx}\"",

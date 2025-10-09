@@ -168,6 +168,14 @@ During build, these are added as entrypoints and bundled into separate HTML file
 - **In dev mode**: Uses Vite's plugin container to load and transform the HTML in real-time
 - **In production**: Reads the built HTML files using Vite's manifest.json to locate them
 
+## Support
+
+Plain React SPAs: Well supported
+
+React Router v6 or React Router v7 in Declarative mode: Well supported
+
+React Router v7 in Data or Framework Mode: Hackily supported
+
 ## API
 
 ### `chatGPTWidgetPlugin(options?)`

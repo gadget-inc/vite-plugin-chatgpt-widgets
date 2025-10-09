@@ -427,5 +427,132 @@ describe("Plain React (without React Router)", () => {
       }
     }, 30000);
   });
-});
 
+  describe("HMR Tests", () => {
+    let devServer: ViteDevServer;
+
+    beforeAll(async () => {
+      devServer = await createServer({
+        root: FIXTURE_PLAIN_REACT_DIR,
+        configFile: path.join(FIXTURE_PLAIN_REACT_DIR, "vite.config.ts"),
+        server: {
+          port: 5194,
+        },
+        logLevel: "warn",
+      });
+      await devServer.listen();
+    });
+
+    afterAll(async () => {
+      await devServer?.close();
+    });
+
+    it("should connect Vite client and accept HMR updates", async () => {
+      const { content: html } = await getWidgetHTML("CounterWidget", { devServer });
+
+      const tempHtmlPath = path.join(BUILD_PLAIN_REACT_DIR, "test-widget-hmr.html");
+      // Replace absolute URLs and also make relative module imports absolute
+      let localHtml = html.replace(/https:\/\/example\.com\//g, "http://localhost:5194/");
+      // Make relative imports like /@react-refresh absolute too
+      localHtml = localHtml.replace(/from\s+"\/(@[^"]+)"/g, 'from "http://localhost:5194/$1"');
+      await fs.writeFile(tempHtmlPath, localHtml);
+
+      const { createServer: createHttpServer } = await import("http");
+      const { readFile: fsReadFile } = await import("fs/promises");
+
+      const server = createHttpServer((req, res) => {
+        void (async () => {
+          try {
+            const content = await fsReadFile(tempHtmlPath);
+            res.writeHead(200, {
+              "Content-Type": "text/html",
+              "Access-Control-Allow-Origin": "*",
+            });
+            res.end(content);
+          } catch (error) {
+            res.writeHead(404);
+            res.end("Not found");
+          }
+        })();
+      });
+
+      const port = 5195;
+      await new Promise<void>((resolve) => {
+        server.listen(port, resolve);
+      });
+
+      const widgetPath = path.join(WIDGETS_PLAIN_REACT_DIR, "CounterWidget.tsx");
+      let originalContent: string;
+
+      try {
+        const { chromium } = await import("playwright");
+        const browser = await chromium.launch();
+        const page = await browser.newPage();
+
+        const consoleMessages: string[] = [];
+        const consoleErrors: string[] = [];
+
+        page.on("console", (msg: { type: () => string; text: () => string }) => {
+          const text = msg.text();
+          consoleMessages.push(text);
+          if (msg.type() === "error") {
+            consoleErrors.push(text);
+          }
+        });
+
+        await page.goto(`http://localhost:${port}/`, { waitUntil: "networkidle" });
+        await page.waitForTimeout(500);
+
+        // Verify initial content is visible
+        const initialHeading = await page.textContent("h1");
+        expect(initialHeading).toBe("Counter Widget");
+
+        // Check that Vite client connected (look for Vite-related messages)
+        const hasViteConnection = consoleMessages.some((msg) => msg.includes("[vite]") || msg.includes("connected"));
+        expect(hasViteConnection).toBe(true);
+
+        // Read original content
+        originalContent = await fs.readFile(widgetPath, "utf-8");
+
+        // Modify the component to change the heading
+        const modifiedContent = originalContent.replace(
+          '<h1 className="text-4xl font-bold text-indigo-900 mb-3">Counter Widget</h1>',
+          '<h1 className="text-4xl font-bold text-indigo-900 mb-3">Counter Widget (HMR Updated)</h1>'
+        );
+        await fs.writeFile(widgetPath, modifiedContent);
+
+        // Wait for HMR update to be applied
+        // The page should update automatically without full reload
+        await page.waitForFunction(
+          () => {
+            const heading = document.querySelector("h1");
+            return heading?.textContent === "Counter Widget (HMR Updated)";
+          },
+          { timeout: 5000 }
+        );
+
+        // Verify the update appeared
+        const updatedHeading = await page.textContent("h1");
+        expect(updatedHeading).toBe("Counter Widget (HMR Updated)");
+
+        // Verify no console errors during HMR
+        const filteredErrors = consoleErrors.filter((e) => !e.includes("Download the React DevTools"));
+        if (filteredErrors.length > 0) {
+          console.log("Console errors during HMR test:", filteredErrors);
+        }
+        expect(filteredErrors).toHaveLength(0);
+
+        await browser.close();
+      } finally {
+        // Restore original content
+        if (originalContent!) {
+          await fs.writeFile(widgetPath, originalContent);
+        }
+        await fs.unlink(tempHtmlPath).catch(() => {
+          /* ignore */
+        });
+        server.close();
+      }
+    }, 10000);
+  });
+});
