@@ -1,4 +1,4 @@
-# vite-plugin-chatgpt-widgets
+# ⚡️ vite-plugin-chatgpt-widgets
 
 A vite plugin for automatically bundling ChatGPT widget outputs within a vite project.
 
