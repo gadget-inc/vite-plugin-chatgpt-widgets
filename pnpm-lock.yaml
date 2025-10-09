@@ -37,8 +37,8 @@ importers:
         specifier: github:airhorns/gitpkg#gitpkg-v1.0.0-beta.4-gitpkg-82083c3
         version: https://codeload.github.com/airhorns/gitpkg/tar.gz/237843a1494a2c815ef48bd3d345c725f5ae9495
       playwright:
-        specifier: ^1.56.0
-        version: 1.56.0
+        specifier: 1.54.1
+        version: 1.54.1
       prettier:
         specifier: ^2.8.8
         version: 2.8.8
@@ -2238,13 +2238,13 @@ packages:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
 
-  playwright-core@1.56.0:
-    resolution: {integrity: sha512-1SXl7pMfemAMSDn5rkPeZljxOCYAmQnYLBTExuh6E8USHXGSX3dx6lYZN/xPpTz1vimXmPA9CDnILvmJaB8aSQ==}
+  playwright-core@1.54.1:
+    resolution: {integrity: sha512-Nbjs2zjj0htNhzgiy5wu+3w09YetDx5pkrpI/kZotDlDUaYk0HVA5xrBVPdow4SAUIlhgKcJeJg4GRKW6xHusA==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.56.0:
-    resolution: {integrity: sha512-X5Q1b8lOdWIE4KAoHpW3SE8HvUB+ZZsUoN64ZhjnN8dOb1UpujxBtENGiZFE+9F/yhzJwYa+ca3u43FeLbboHA==}
+  playwright@1.54.1:
+    resolution: {integrity: sha512-peWpSwIBmSLi6aW2auvrUtf2DqY16YYcCMO8rTVx486jKmDTJg7UAhyrraP98GB8BoPURZP8+nxO7TSd4cPr5g==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -5206,11 +5206,11 @@ snapshots:
 
   pirates@4.0.7: {}
 
-  playwright-core@1.56.0: {}
+  playwright-core@1.54.1: {}
 
-  playwright@1.56.0:
+  playwright@1.54.1:
     dependencies:
-      playwright-core: 1.56.0
+      playwright-core: 1.54.1
     optionalDependencies:
       fsevents: 2.3.2
 

@@ -6,8 +6,6 @@ runs:
   using: "composite"
   steps:
     - uses: cachix/install-nix-action@v31
-      with:
-        install_url: https://releases.nixos.org/nix/nix-2.11.1/install
     - run: |
         source <(nix print-dev-env --show-trace) 
         output_file="nix-env.txt"

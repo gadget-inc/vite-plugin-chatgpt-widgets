@@ -2,7 +2,7 @@
   description = "Gadget js-clients development environment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -19,7 +19,22 @@
         };
 
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ node corepack git ];
+          packages = with pkgs; [ 
+            node 
+            corepack 
+            git 
+            playwright-driver.browsers
+          ];
+          
+          # Playwright environment variables for Nix-provided browsers
+          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+          
+          shellHook = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+            export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath (with pkgs; [
+              playwright-driver.browsers
+            ])}:$LD_LIBRARY_PATH
+          '';
         };
       });
 }
