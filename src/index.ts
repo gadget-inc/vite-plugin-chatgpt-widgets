@@ -155,6 +155,28 @@ export async function getWidgetHTML(
     // rewrite src="virtual:chatgpt-widget-${widgetName}.js" to src="/@id/virtual:chatgpt-widget-${widgetName}.js"
     html = transformedHtml.replace(/src="virtual:chatgpt-widget-/g, `src="/@id/virtual:chatgpt-widget-`);
 
+    // Inject React preamble if using @vitejs/plugin-react (but not React Router, which handles its own way)
+    const hasReactRouter = vite.config.plugins.some((plugin) => plugin.name === "react-router" || plugin.name.includes("react-router"));
+    const hasViteReact = vite.config.plugins.some((plugin) => plugin.name === "vite:react-babel" || plugin.name === "vite:react-refresh");
+
+    if (hasViteReact && !hasReactRouter) {
+      // Inject preamble script as a regular (non-module) inline script so it executes synchronously
+      // This must run before any module scripts load
+      html = html.replace(
+        /<head>/,
+        `<head>
+    <script>
+      // React refresh preamble for @vitejs/plugin-react
+      // These must be defined before React components load
+      if (typeof window !== 'undefined') {
+        window.__vite_plugin_react_preamble_installed__ = true;
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+      }
+    </script>`
+      );
+    }
+
     const plugin = vite.config.plugins.find((plugin) => plugin.name === PLUGIN_NAME) as ChatGPTWidgetPlugin;
     // Get explicit baseUrl from the plugin in the plugin options
     const explicitBaseUrl = plugin.pluginOptions.baseUrl;
@@ -411,9 +433,20 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
           }
         }
 
+        // Check if React Router is present (for HMR preamble compatibility)
+        const hasReactRouter = config.plugins.some((plugin) => plugin.name === "react-router" || plugin.name.includes("react-router"));
+
+        // In dev mode with React Router, inject the HMR runtime import
+        // Note: @vitejs/plugin-react preamble is handled in the HTML, not here
+        let hmrRuntimeSetup = "";
+        if (config.command === "serve" && hasReactRouter) {
+          hmrRuntimeSetup = `import "virtual:react-router/inject-hmr-runtime";\n`;
+        }
+
         // Generate the entrypoint with or without root layout wrapper
         if (rootFile) {
           return `
+${hmrRuntimeSetup}
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from '${widgetFile}';
@@ -429,6 +462,7 @@ root.render(React.createElement(RootLayout, null, React.createElement(Widget)));
           `.trim();
         } else {
           return `
+${hmrRuntimeSetup}
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Widget from '${widgetFile}';

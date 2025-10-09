@@ -12,3 +12,7 @@ export const FIXTURE_REACT_ROUTER_DIR = path.resolve(__dirname, "fixtures/test-p
 export const WIDGETS_REACT_ROUTER_DIR = path.join(FIXTURE_REACT_ROUTER_DIR, "web/chatgpt-widgets");
 export const BUILD_REACT_ROUTER_DIR = path.join(FIXTURE_REACT_ROUTER_DIR, "build/client");
 export const MANIFEST_REACT_ROUTER_PATH = path.join(BUILD_REACT_ROUTER_DIR, ".vite/manifest.json");
+export const FIXTURE_PLAIN_REACT_DIR = path.resolve(__dirname, "fixtures/test-project-plain-react");
+export const WIDGETS_PLAIN_REACT_DIR = path.join(FIXTURE_PLAIN_REACT_DIR, "web/chatgpt-widgets");
+export const BUILD_PLAIN_REACT_DIR = path.join(FIXTURE_PLAIN_REACT_DIR, "dist");
+export const MANIFEST_PLAIN_REACT_PATH = path.join(BUILD_PLAIN_REACT_DIR, ".vite/manifest.json");

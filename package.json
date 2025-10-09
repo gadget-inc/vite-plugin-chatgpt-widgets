@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-chatgpt-widgets",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "files": [
     "Readme.md",
     "dist/**/*"
@@ -46,6 +46,7 @@
     "eslint": "^8.57.0",
     "execa": "^5.1.1",
     "gitpkg": "github:airhorns/gitpkg#gitpkg-v1.0.0-beta.4-gitpkg-82083c3",
+    "playwright": "^1.56.0",
     "prettier": "^2.8.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

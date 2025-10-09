@@ -18,6 +18,10 @@ import {
   WIDGETS_REACT_ROUTER_DIR,
   BUILD_REACT_ROUTER_DIR,
   MANIFEST_REACT_ROUTER_PATH,
+  FIXTURE_PLAIN_REACT_DIR,
+  WIDGETS_PLAIN_REACT_DIR,
+  BUILD_PLAIN_REACT_DIR,
+  MANIFEST_PLAIN_REACT_PATH,
 } from "./fixtureDirs.js";
 
 describe("Integration Tests", () => {
@@ -423,8 +427,8 @@ describe("Integration Tests", () => {
       it("should discover widgets in React Router project", async () => {
         const widgets = await getWidgets(WIDGETS_REACT_ROUTER_DIR, { devServer });
 
-        expect(widgets).toHaveLength(2);
-        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget"]);
+        expect(widgets).toHaveLength(3);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget", "SimpleWidget"]);
       });
 
       it("should generate valid HTML for React Router widgets in dev mode", async () => {
@@ -500,8 +504,8 @@ describe("Integration Tests", () => {
           manifestPath: MANIFEST_REACT_ROUTER_PATH,
         });
 
-        expect(widgets).toHaveLength(2);
-        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget"]);
+        expect(widgets).toHaveLength(3);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["DataWidget", "NavigationWidget", "SimpleWidget"]);
       });
 
       it("should generate valid HTML for React Router widgets in production mode", async () => {
@@ -645,6 +649,634 @@ describe("Integration Tests", () => {
         expect(devHtml).toContain('<script type="module"');
         expect(prodHtml).toContain('<script type="module"');
       });
+
+      it("should include React Router HMR runtime import in dev mode widget JavaScript", async () => {
+        const { content: devHtml } = await getWidgetHTML("SimpleWidget", { devServer });
+
+        // Extract the script src
+        const scriptMatch = devHtml.match(/src="([^"]+virtual:chatgpt-widget-SimpleWidget\.js[^"]*)"/);
+        expect(scriptMatch).toBeTruthy();
+
+        // Fetch the JavaScript module from the dev server to verify it contains the HMR runtime import
+        const scriptUrl = scriptMatch![1].replace("https://example.com/@id/", "").replace("https://example.com/", "");
+
+        const resolved = await devServer.pluginContainer.resolveId(scriptUrl);
+        expect(resolved).toBeTruthy();
+
+        const loaded = await devServer.pluginContainer.load(resolved!.id);
+        const jsCode = typeof loaded === "string" ? loaded : loaded!.code;
+
+        // The generated JavaScript should import the React Router HMR runtime
+        expect(jsCode).toContain('import "virtual:react-router/inject-hmr-runtime"');
+      });
+    });
+
+    describe("Plain React Plugin Preamble Regression", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        devServer = await createServer({
+          root: FIXTURE_PLAIN_REACT_DIR,
+          configFile: path.join(FIXTURE_PLAIN_REACT_DIR, "vite.config.ts"),
+          server: {
+            port: 5199,
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should include @vitejs/plugin-react preamble script in dev mode widget HTML", async () => {
+        const { content: devHtml } = await getWidgetHTML("CounterWidget", { devServer });
+
+        // The HTML should contain the preamble script that sets up React refresh globals
+        expect(devHtml).toContain("window.__vite_plugin_react_preamble_installed__");
+        expect(devHtml).toContain("window.$RefreshReg$");
+        expect(devHtml).toContain("window.$RefreshSig$");
+
+        // The preamble should be in a non-module script (for synchronous execution)
+        const preambleMatch = devHtml.match(/<script>\s*[\s\S]*?window\.__vite_plugin_react_preamble_installed__[\s\S]*?<\/script>/);
+        expect(preambleMatch).toBeTruthy();
+
+        // The preamble script should NOT have type="module"
+        const preambleScript = preambleMatch![0];
+        expect(preambleScript).not.toContain('type="module"');
+      });
+    });
+
+    describe("Browser Execution Tests", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        // Make sure the build is ready
+        const manifestExists = await fs
+          .stat(MANIFEST_REACT_ROUTER_PATH)
+          .then(() => true)
+          .catch(() => false);
+        if (!manifestExists) {
+          throw new Error("React Router fixture must be built before running browser tests");
+        }
+
+        // Also start a dev server for dev mode tests
+        devServer = await createServer({
+          root: FIXTURE_REACT_ROUTER_DIR,
+          configFile: path.join(FIXTURE_REACT_ROUTER_DIR, "vite.config.ts"),
+          server: {
+            port: 5180,
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should load React Router widget without HMR preamble errors in development", async () => {
+        // Get the dev HTML for a widget (using SimpleWidget which doesn't need Router context)
+        const { content: html } = await getWidgetHTML("SimpleWidget", { devServer });
+
+        // Write the HTML to a temporary file so we can serve it
+        const tempHtmlPath = path.join(BUILD_REACT_ROUTER_DIR, "test-widget-dev.html");
+
+        // Since we're in dev mode, rewrite URLs to point to the dev server
+        const localHtml = html.replace(/https:\/\/example\.com\//g, "http://localhost:5180/");
+        await fs.writeFile(tempHtmlPath, localHtml);
+
+        // Serve just this one HTML file (assets will be loaded from dev server)
+        const { createServer: createHttpServer } = await import("http");
+        const { readFile: fsReadFile } = await import("fs/promises");
+
+        const server = createHttpServer((req, res) => {
+          void (async () => {
+            try {
+              const content = await fsReadFile(tempHtmlPath);
+              res.writeHead(200, {
+                "Content-Type": "text/html",
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(content);
+            } catch (error) {
+              res.writeHead(404);
+              res.end("Not found");
+            }
+          })();
+        });
+
+        const port = 5181;
+        await new Promise<void>((resolve) => {
+          server.listen(port, resolve);
+        });
+
+        try {
+          const { chromium } = await import("playwright");
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+
+          const consoleErrors: string[] = [];
+          const pageErrors: Error[] = [];
+
+          page.on("console", (msg: { type: () => string; text: () => string }) => {
+            if (msg.type() === "error") {
+              consoleErrors.push(msg.text());
+            }
+          });
+
+          page.on("pageerror", (err: Error) => {
+            pageErrors.push(err);
+          });
+
+          await page.goto(`http://localhost:${port}/`);
+
+          // Wait for JavaScript to execute
+          await page.waitForTimeout(2000);
+
+          await browser.close();
+          await fs.unlink(tempHtmlPath);
+
+          // Log any errors for debugging
+          if (pageErrors.length > 0 || consoleErrors.length > 0) {
+            console.log("Dev mode errors:", {
+              pageErrors: pageErrors.map((e) => e.message),
+              consoleErrors,
+            });
+          }
+
+          // Should have no errors - the HMR preamble should be properly set
+          expect(pageErrors).toHaveLength(0);
+          expect(consoleErrors).toHaveLength(0);
+        } finally {
+          server.close();
+        }
+      }, 30000);
+
+      it("should load React Router widget without HMR preamble errors in production", async () => {
+        // Get the production HTML for a widget (using SimpleWidget which doesn't need Router context)
+        const { content: html } = await getWidgetHTML("SimpleWidget", {
+          manifestPath: MANIFEST_REACT_ROUTER_PATH,
+        });
+
+        // Write the HTML to a temporary file so we can serve it
+        const tempHtmlPath = path.join(BUILD_REACT_ROUTER_DIR, "test-widget.html");
+
+        // Make URLs relative for local serving by removing the absolute base URL
+        const localHtml = html.replace(/https:\/\/example\.com\//g, "/");
+        await fs.writeFile(tempHtmlPath, localHtml);
+
+        // We need a simple HTTP server to serve the files
+        const { createServer: createHttpServer } = await import("http");
+        const { stat: fsStat, readFile: fsReadFile } = await import("fs/promises");
+
+        const server = createHttpServer((req, res) => {
+          void (async () => {
+            const url = req.url || "/";
+            let filePath: string;
+
+            if (url === "/") {
+              filePath = tempHtmlPath;
+            } else {
+              // Serve files from the build directory
+              filePath = path.join(BUILD_REACT_ROUTER_DIR, url);
+            }
+
+            try {
+              const stats = await fsStat(filePath);
+              if (!stats.isFile()) {
+                res.writeHead(404);
+                res.end("Not found");
+                return;
+              }
+
+              const content = await fsReadFile(filePath);
+
+              // Set appropriate content type
+              const ext = path.extname(filePath);
+              const contentTypes: Record<string, string> = {
+                ".html": "text/html",
+                ".js": "application/javascript",
+                ".css": "text/css",
+                ".json": "application/json",
+              };
+              const contentType = contentTypes[ext] || "application/octet-stream";
+
+              res.writeHead(200, {
+                "Content-Type": contentType,
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(content);
+            } catch (error) {
+              res.writeHead(404);
+              res.end("Not found");
+            }
+          })();
+        });
+
+        const port = 5179;
+        await new Promise<void>((resolve) => {
+          server.listen(port, resolve);
+        });
+
+        try {
+          // Now load the page in Playwright and check for errors
+          const { chromium } = await import("playwright");
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+
+          const consoleErrors: string[] = [];
+          const pageErrors: Error[] = [];
+
+          page.on("console", (msg: { type: () => string; text: () => string }) => {
+            if (msg.type() === "error") {
+              consoleErrors.push(msg.text());
+            }
+          });
+
+          page.on("pageerror", (err: Error) => {
+            pageErrors.push(err);
+          });
+
+          await page.goto(`http://localhost:${port}/`);
+
+          // Wait a bit for JavaScript to execute
+          await page.waitForTimeout(1000);
+
+          await browser.close();
+          await fs.unlink(tempHtmlPath);
+
+          // Log any errors for debugging
+          if (pageErrors.length > 0 || consoleErrors.length > 0) {
+            console.log("Production mode errors:", {
+              pageErrors: pageErrors.map((e) => e.message),
+              consoleErrors,
+            });
+          }
+
+          // Should have no errors
+          expect(pageErrors).toHaveLength(0);
+          expect(consoleErrors).toHaveLength(0);
+        } finally {
+          server.close();
+        }
+      }, 30000); // 30 second timeout for browser tests
+    });
+  });
+
+  describe("Plain React (without React Router)", () => {
+    describe("Development Mode", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        devServer = await createServer({
+          root: FIXTURE_PLAIN_REACT_DIR,
+          configFile: path.join(FIXTURE_PLAIN_REACT_DIR, "vite.config.ts"),
+          server: {
+            port: 5190,
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should discover widgets in plain React project", async () => {
+        const widgets = await getWidgets(WIDGETS_PLAIN_REACT_DIR, { devServer });
+
+        expect(widgets).toHaveLength(2);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["CounterWidget", "GreetingWidget"]);
+      });
+
+      it("should generate valid HTML for plain React widgets in dev mode", async () => {
+        const { content: html } = await getWidgetHTML("CounterWidget", { devServer });
+
+        expect(html).toContain("<!DOCTYPE html>");
+        expect(html).toContain("<title>CounterWidget Widget</title>");
+        expect(html).toContain('<div id="root"></div>');
+        expect(html).toContain('<script type="module"');
+        expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-CounterWidget.js");
+      });
+
+      it("should generate HTML for both plain React widgets", async () => {
+        const { content: counterHtml } = await getWidgetHTML("CounterWidget", { devServer });
+        const { content: greetingHtml } = await getWidgetHTML("GreetingWidget", { devServer });
+
+        expect(counterHtml).toContain("CounterWidget Widget");
+        expect(greetingHtml).toContain("GreetingWidget Widget");
+
+        expect(counterHtml).toContain("/@id/virtual:chatgpt-widget-CounterWidget.js");
+        expect(greetingHtml).toContain("/@id/virtual:chatgpt-widget-GreetingWidget.js");
+      });
+
+      it("should include all plain React widgets in getWidgets result", async () => {
+        const widgets = await getWidgets(WIDGETS_PLAIN_REACT_DIR, { devServer });
+
+        for (const widget of widgets) {
+          expect(widget.name).toBeTruthy();
+          expect(widget.filePath).toBeTruthy();
+          expect(widget.content).toContain("<!DOCTYPE html>");
+          expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
+          expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
+        }
+      });
+    });
+
+    describe("Production Mode", () => {
+      beforeAll(async () => {
+        // Build is already done, but verify it exists
+        const manifestExists = await fs
+          .stat(MANIFEST_PLAIN_REACT_PATH)
+          .then(() => true)
+          .catch(() => false);
+        expect(manifestExists).toBe(true);
+      });
+
+      it("should have widget entries in the manifest for plain React project", async () => {
+        const manifestContent = await fs.readFile(MANIFEST_PLAIN_REACT_PATH, "utf-8");
+        const manifest = JSON.parse(manifestContent);
+
+        expect(manifest).toHaveProperty("virtual:chatgpt-widget-CounterWidget.html");
+        expect(manifest).toHaveProperty("virtual:chatgpt-widget-GreetingWidget.html");
+
+        expect(manifest["virtual:chatgpt-widget-CounterWidget.html"].file).toBeTruthy();
+        expect(manifest["virtual:chatgpt-widget-GreetingWidget.html"].file).toBeTruthy();
+      });
+
+      it("should discover plain React widgets in production mode", async () => {
+        const widgets = await getWidgets(WIDGETS_PLAIN_REACT_DIR, {
+          manifestPath: MANIFEST_PLAIN_REACT_PATH,
+        });
+
+        expect(widgets).toHaveLength(2);
+        expect(widgets.map((w) => w.name).sort()).toEqual(["CounterWidget", "GreetingWidget"]);
+      });
+
+      it("should generate valid HTML for plain React widgets in production mode", async () => {
+        const { content: html } = await getWidgetHTML("CounterWidget", {
+          manifestPath: MANIFEST_PLAIN_REACT_PATH,
+        });
+
+        expect(html).toContain("<!DOCTYPE html>");
+        expect(html).toContain("<title>CounterWidget Widget</title>");
+        expect(html).toContain('<div id="root"></div>');
+        expect(html).toContain('<script type="module"');
+        expect(html).not.toContain("virtual:");
+      });
+
+      it("should have built HTML files on disk for plain React widgets", async () => {
+        const manifestContent = await fs.readFile(MANIFEST_PLAIN_REACT_PATH, "utf-8");
+        const manifest = JSON.parse(manifestContent);
+
+        const widgetEntries = Object.entries(manifest).filter(([key]) => key.startsWith("virtual:chatgpt-widget-"));
+
+        for (const [, entry] of widgetEntries) {
+          const filePath = path.join(BUILD_PLAIN_REACT_DIR, (entry as any).file);
+          const fileExists = await fs
+            .stat(filePath)
+            .then(() => true)
+            .catch(() => false);
+          expect(fileExists).toBe(true);
+        }
+      });
+
+      it("should include plain React widgets in getWidgets result with content", async () => {
+        const widgets = await getWidgets(WIDGETS_PLAIN_REACT_DIR, {
+          manifestPath: MANIFEST_PLAIN_REACT_PATH,
+        });
+
+        for (const widget of widgets) {
+          expect(widget.name).toBeTruthy();
+          expect(widget.filePath).toBeTruthy();
+          expect(widget.content).toContain("<!DOCTYPE html>");
+          expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
+          expect(widget.content).not.toContain("virtual:");
+          expect(widget.content).not.toContain("/@id/");
+        }
+      });
+    });
+
+    describe("Browser Execution Tests", () => {
+      let devServer: ViteDevServer;
+
+      beforeAll(async () => {
+        // Make sure the build is ready
+        const manifestExists = await fs
+          .stat(MANIFEST_PLAIN_REACT_PATH)
+          .then(() => true)
+          .catch(() => false);
+        if (!manifestExists) {
+          throw new Error("Plain React fixture must be built before running browser tests");
+        }
+
+        // Also start a dev server for dev mode tests
+        devServer = await createServer({
+          root: FIXTURE_PLAIN_REACT_DIR,
+          configFile: path.join(FIXTURE_PLAIN_REACT_DIR, "vite.config.ts"),
+          server: {
+            port: 5191,
+          },
+          logLevel: "warn",
+        });
+        await devServer.listen();
+      });
+
+      afterAll(async () => {
+        await devServer?.close();
+      });
+
+      it("should load plain React widget without errors in development", async () => {
+        const { content: html } = await getWidgetHTML("CounterWidget", { devServer });
+
+        const tempHtmlPath = path.join(BUILD_PLAIN_REACT_DIR, "test-widget-dev.html");
+        // Replace absolute URLs and also make relative module imports absolute
+        let localHtml = html.replace(/https:\/\/example\.com\//g, "http://localhost:5191/");
+        // Make relative imports like /@react-refresh absolute too
+        localHtml = localHtml.replace(/from\s+"\/(@[^"]+)"/g, 'from "http://localhost:5191/$1"');
+        await fs.writeFile(tempHtmlPath, localHtml);
+
+        const { createServer: createHttpServer } = await import("http");
+        const { readFile: fsReadFile } = await import("fs/promises");
+
+        const server = createHttpServer((req, res) => {
+          void (async () => {
+            try {
+              const content = await fsReadFile(tempHtmlPath);
+              res.writeHead(200, {
+                "Content-Type": "text/html",
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(content);
+            } catch (error) {
+              res.writeHead(404);
+              res.end("Not found");
+            }
+          })();
+        });
+
+        const port = 5192;
+        await new Promise<void>((resolve) => {
+          server.listen(port, resolve);
+        });
+
+        try {
+          const { chromium } = await import("playwright");
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+
+          const consoleErrors: string[] = [];
+          const pageErrors: Error[] = [];
+          const failedRequests: string[] = [];
+          const allResponses: Array<{ url: string; status: number; contentType: string }> = [];
+
+          page.on("console", (msg: { type: () => string; text: () => string }) => {
+            if (msg.type() === "error") {
+              consoleErrors.push(msg.text());
+            }
+          });
+
+          page.on("pageerror", (err: Error) => {
+            pageErrors.push(err);
+          });
+
+          page.on("requestfailed", (request: { url: () => string; failure: () => { errorText: string } | null }) => {
+            failedRequests.push(`${request.url()} - ${request.failure()?.errorText || "unknown"}`);
+          });
+
+          page.on("response", (response: { url: () => string; status: () => number; headers: () => Record<string, string> }) => {
+            const contentType = response.headers()["content-type"] || "";
+            allResponses.push({
+              url: response.url(),
+              status: response.status(),
+              contentType,
+            });
+          });
+
+          await page.goto(`http://localhost:${port}/`, { waitUntil: "networkidle" });
+          await page.waitForTimeout(3000);
+
+          await browser.close();
+          await fs.unlink(tempHtmlPath);
+
+          if (pageErrors.length > 0 || consoleErrors.length > 0 || failedRequests.length > 0) {
+            console.log("Plain React dev mode errors:", {
+              pageErrors: pageErrors.map((e) => e.message),
+              consoleErrors,
+              failedRequests,
+            });
+            console.log("\nAll responses:");
+            allResponses.forEach((r) => {
+              console.log(`  ${r.url} -> ${r.contentType} (${r.status})`);
+            });
+          }
+
+          expect(pageErrors).toHaveLength(0);
+          expect(consoleErrors).toHaveLength(0);
+        } finally {
+          server.close();
+        }
+      }, 30000);
+
+      it("should load plain React widget without errors in production", async () => {
+        const { content: html } = await getWidgetHTML("CounterWidget", {
+          manifestPath: MANIFEST_PLAIN_REACT_PATH,
+        });
+
+        const tempHtmlPath = path.join(BUILD_PLAIN_REACT_DIR, "test-widget.html");
+        const localHtml = html.replace(/https:\/\/example\.com\//g, "/");
+        await fs.writeFile(tempHtmlPath, localHtml);
+
+        const { createServer: createHttpServer } = await import("http");
+        const { stat: fsStat, readFile: fsReadFile } = await import("fs/promises");
+
+        const server = createHttpServer((req, res) => {
+          void (async () => {
+            const url = req.url || "/";
+            let filePath: string;
+
+            if (url === "/") {
+              filePath = tempHtmlPath;
+            } else {
+              filePath = path.join(BUILD_PLAIN_REACT_DIR, url);
+            }
+
+            try {
+              const stats = await fsStat(filePath);
+              if (!stats.isFile()) {
+                res.writeHead(404);
+                res.end("Not found");
+                return;
+              }
+
+              const content = await fsReadFile(filePath);
+              const ext = path.extname(filePath);
+              const contentTypes: Record<string, string> = {
+                ".html": "text/html",
+                ".js": "application/javascript",
+                ".css": "text/css",
+                ".json": "application/json",
+              };
+              const contentType = contentTypes[ext] || "application/octet-stream";
+
+              res.writeHead(200, {
+                "Content-Type": contentType,
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(content);
+            } catch (error) {
+              res.writeHead(404);
+              res.end("Not found");
+            }
+          })();
+        });
+
+        const port = 5193;
+        await new Promise<void>((resolve) => {
+          server.listen(port, resolve);
+        });
+
+        try {
+          const { chromium } = await import("playwright");
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+
+          const consoleErrors: string[] = [];
+          const pageErrors: Error[] = [];
+
+          page.on("console", (msg: { type: () => string; text: () => string }) => {
+            if (msg.type() === "error") {
+              consoleErrors.push(msg.text());
+            }
+          });
+
+          page.on("pageerror", (err: Error) => {
+            pageErrors.push(err);
+          });
+
+          await page.goto(`http://localhost:${port}/`);
+          await page.waitForTimeout(1000);
+
+          await browser.close();
+          await fs.unlink(tempHtmlPath);
+
+          if (pageErrors.length > 0 || consoleErrors.length > 0) {
+            console.log("Plain React production mode errors:", {
+              pageErrors: pageErrors.map((e) => e.message),
+              consoleErrors,
+            });
+          }
+
+          expect(pageErrors).toHaveLength(0);
+          expect(consoleErrors).toHaveLength(0);
+        } finally {
+          server.close();
+        }
+      }, 30000);
     });
   });
 });
