@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function WidgetA() {
   return (
     <div className="widget-a">

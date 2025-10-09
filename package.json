@@ -23,7 +23,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm -r --filter './spec/fixtures/*' typecheck",
     "build": "rm -rf dist && mkdir -p dist/cjs dist/esm && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && echo '{\"type\": \"module\"}' > dist/esm/package.json && tsc -b tsconfig.cjs.json tsconfig.esm.json",
     "watch": "tsc --watch --preserveWatchOutput",
     "prepublishOnly": "pnpm build",

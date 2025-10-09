@@ -5,10 +5,10 @@ import { renderToString } from "react-dom/server";
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,
-  responseHeaders: Headers,
+  _responseHeaders: Headers,
   reactRouterContext: EntryContext
 ) {
-  let html = renderToString(<ServerRouter context={reactRouterContext} url={request.url} />);
+  const html = renderToString(<ServerRouter context={reactRouterContext} url={request.url} />);
 
   return new Response("<!DOCTYPE html>" + html, {
     headers: { "Content-Type": "text/html" },

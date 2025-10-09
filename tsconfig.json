@@ -5,5 +5,16 @@
     "module": "nodenext",
     "moduleResolution": "nodenext"
   },
-  "include": ["./src", "./spec", "./build"]
+  "include": ["./src", "./spec", "./build"],
+  "exclude": [
+    "./spec/fixtures/*/web",
+    "./spec/fixtures/*/app",
+    "./spec/fixtures/*/vite.config.ts",
+    "./spec/fixtures/*/react-router.config.ts",
+    "./spec/fixtures/*/tailwind.config.js",
+    "./spec/fixtures/*/postcss.config.js",
+    "./spec/fixtures/*/node_modules",
+    "./spec/fixtures/*/dist",
+    "./spec/fixtures/*/build"
+  ]
 }

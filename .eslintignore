@@ -3,3 +3,4 @@ node_modules
 tmp
 packages/*/dist
 spec/fixtures/**/dist
+spec/fixtures/**/build

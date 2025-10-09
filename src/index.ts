@@ -73,13 +73,13 @@ function transformHtmlWithAbsoluteUrls(html: string, baseUrl: string): string {
   // Transform script src attributes
   html = html.replace(
     /(<script[^>]+src=["'])\/([^"']+)(["'])/g,
-    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+    (_match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
   );
 
   // Transform link href attributes (for modulepreload, stylesheets, etc.)
   html = html.replace(
     /(<link[^>]+href=["'])\/([^"']+)(["'])/g,
-    (match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
+    (_match, prefix, path, suffix) => `${prefix}${normalizedBase}${path}${suffix}`
   );
 
   return html;
