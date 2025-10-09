@@ -13,12 +13,14 @@ jobs:
   release:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/setup-test-env
       - id: npm-publish
         name: Publish to npm
-        uses: JS-DevTools/npm-publish@v1
+        uses: JS-DevTools/npm-publish@v4
         with:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
