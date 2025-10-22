@@ -4,7 +4,7 @@ import { chatGPTWidgetPlugin } from "../../../src/index.js";
 export default defineConfig({
   plugins: [
     chatGPTWidgetPlugin({
-      widgetsDir: "web/chatgpt-widgets",
+      widgetsDir: "web/chatgpt",
       baseUrl: "https://example.com",
     }),
   ],

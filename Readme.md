@@ -23,7 +23,7 @@ import { chatGPTWidgetPlugin } from "vite-plugin-chatgpt-widgets";
 export default defineConfig({
   plugins: [
     chatGPTWidgetPlugin({
-      widgetsDir: "web/chatgpt-widgets", // default: 'web/chatgpt-widgets'
+      widgetsDir: "web/chatgpt", // default: 'web/chatgpt'
       baseUrl: "https://example.com", // if not using a vite `base`, this is required because the chatgpt iframe is sandboxed and absolute URL links are required
     }),
   ],
@@ -44,12 +44,12 @@ export default defineConfig({
 Create React components in your widgets directory:
 
 ```tsx
-// in web/chatgpt-widgets/Hello.tsx
+// in web/chatgpt/Hello.tsx
 export default function Hello() {
   return <div>Hello from ChatGPT Widget!</div>;
 }
 
-// in web/chatgpt-widgets/ListFoobars.tsx
+// in web/chatgpt/ListFoobars.tsx
 export default function ListFoobars() {
   return (
     <ul>
@@ -66,7 +66,7 @@ export default function ListFoobars() {
 You can optionally create a root layout component that will wrap all widgets. If a file named `root.tsx` (or `root.ts`, `root.jsx`, `root.js`) exists in the widgets directory, it will automatically wrap all other widget components:
 
 ```tsx
-// web/chatgpt-widgets/root.tsx
+// web/chatgpt/root.tsx
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <SomeProvider>
@@ -91,10 +91,10 @@ After setting up the plugin and writing some widgets, you need to expose the wid
 import { getWidgets } from "vite-plugin-chatgpt-widgets";
 
 // In development, pass the Vite dev server instance from wherever you can get it
-const widgets = await getWidgets("web/chatgpt-widgets", viteDevServer);
+const widgets = await getWidgets("web/chatgpt", viteDevServer);
 
 // In production, pass a path to the vite manifest, where we'll load precompiled versions from
-const widgets = await getWidgets("web/chatgpt-widgets", {
+const widgets = await getWidgets("web/chatgpt", {
   manifestPath: "dist/.vite/manifest.json",
 });
 
@@ -184,7 +184,7 @@ The Vite plugin.
 
 **Options:**
 
-- `widgetsDir` (string, optional): Directory containing widget components. Default: `'web/chatgpt-widgets'`
+- `widgetsDir` (string, optional): Directory containing widget components. Default: `'web/chatgpt'`
 - `baseUrl` (string, optional): Base URL for widget assets. Required if Vite's `base` config is not an absolute URL and you need fully qualified URLs for sandboxed iframes. Should include protocol and domain (e.g., `"https://example.com"`). Note: Does not require trailing slash.
 
 ### `getWidgets(widgetsDir, viteHandle)`

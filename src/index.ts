@@ -3,7 +3,7 @@ import * as path from "path";
 import type { Plugin as VitePlugin, ResolvedConfig, ViteDevServer } from "vite";
 
 interface ChatGPTWidgetPluginOptions {
-  /** Directory containing widget component files. Defaults to "web/chatgpt-widgets" */
+  /** Directory containing widget component files. Defaults to "web/chatgpt" */
   widgetsDir?: string;
   /**
    * Base URL for widget assets. Required if Vite's base config is not an absolute URL.
@@ -141,7 +141,7 @@ export async function getWidgetHTML(
 
     const loaded = await vite.pluginContainer.load(resolved.id);
     if (!loaded || (typeof loaded === "string" ? !loaded : !loaded.code)) {
-      throw new Error(`Vite returned no content for widget '${widgetName}'. ` + `Make sure the widget file exists in web/chatgpt-widgets/`);
+      throw new Error(`Vite returned no content for widget '${widgetName}'. ` + `Make sure the widget file exists in web/chatgpt/`);
     }
 
     const rawHtml = typeof loaded === "string" ? loaded : loaded.code;
@@ -253,7 +253,7 @@ export async function getWidgetHTML(
  * The component files should export a React component as their default export.
  *
  * @example
- * // In web/chatgpt-widgets/MyWidget.tsx
+ * // In web/chatgpt/MyWidget.tsx
  * export default function MyWidget() {
  *   return <div>Hello World</div>;
  * }
@@ -292,7 +292,7 @@ export function generateWidgetEntrypointHTML(widgetName: string): string {
 type ChatGPTWidgetPlugin = VitePlugin & { pluginOptions: ChatGPTWidgetPluginOptions };
 
 export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): ChatGPTWidgetPlugin {
-  const widgetsDir = options.widgetsDir || "web/chatgpt-widgets";
+  const widgetsDir = options.widgetsDir || "web/chatgpt";
   let config: ResolvedConfig;
   let viteRoot: string;
 
