@@ -41,7 +41,7 @@ describe("React Router v7 Integration", () => {
       expect(html).toContain("<title>NavigationWidget Widget</title>");
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain('<script type="module"');
-      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-NavigationWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-NavigationWidget.js");
     });
 
     it("should generate HTML for both React Router widgets", async () => {
@@ -51,8 +51,8 @@ describe("React Router v7 Integration", () => {
       expect(navWidgetHtml).toContain("NavigationWidget Widget");
       expect(dataWidgetHtml).toContain("DataWidget Widget");
 
-      expect(navWidgetHtml).toContain("/@id/virtual:chatgpt-widget-NavigationWidget.js");
-      expect(dataWidgetHtml).toContain("/@id/virtual:chatgpt-widget-DataWidget.js");
+      expect(navWidgetHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-NavigationWidget.js");
+      expect(dataWidgetHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-DataWidget.js");
     });
 
     it("should include all React Router widgets in getWidgets result", async () => {
@@ -63,7 +63,7 @@ describe("React Router v7 Integration", () => {
         expect(widget.filePath).toBeTruthy();
         expect(widget.content).toContain("<!DOCTYPE html>");
         expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
-        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
+        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-");
       }
     });
 
@@ -128,11 +128,11 @@ describe("React Router v7 Integration", () => {
       const manifestContent = await fs.readFile(MANIFEST_REACT_ROUTER_PATH, "utf-8");
       const manifest = JSON.parse(manifestContent);
 
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-NavigationWidget.html");
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-DataWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-NavigationWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-DataWidget.html");
 
-      expect(manifest["virtual:chatgpt-widget-NavigationWidget.html"].file).toBeTruthy();
-      expect(manifest["virtual:chatgpt-widget-DataWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-NavigationWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-DataWidget.html"].file).toBeTruthy();
     });
 
     it("should discover React Router widgets in production mode", async () => {
@@ -320,7 +320,7 @@ describe("React Router v7 Integration", () => {
       const { content: devHtml } = await getWidgetHTML("SimpleWidget", { devServer });
 
       // Extract the script src
-      const scriptMatch = devHtml.match(/src="([^"]+virtual:chatgpt-widget-SimpleWidget\.js[^"]*)"/);
+      const scriptMatch = devHtml.match(/src="([^"]+virtual:chatgpt-widget-entrypoint-SimpleWidget\.js[^"]*)"/);
       expect(scriptMatch).toBeTruthy();
 
       // Fetch the JavaScript module from the dev server to verify it contains the React Router HMR runtime

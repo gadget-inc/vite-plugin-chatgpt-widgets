@@ -46,7 +46,7 @@ describe("Basic Project Integration", () => {
 
       // Check that the script tag is present and uses absolute URL
       expect(html).toContain('<script type="module"');
-      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-TestWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-TestWidget.js");
     });
 
     it("should generate different HTML for different widgets in dev mode", async () => {
@@ -56,8 +56,8 @@ describe("Basic Project Integration", () => {
       expect(testWidgetHtml).toContain("TestWidget Widget");
       expect(anotherWidgetHtml).toContain("AnotherWidget Widget");
 
-      expect(testWidgetHtml).toContain("/@id/virtual:chatgpt-widget-TestWidget.js");
-      expect(anotherWidgetHtml).toContain("/@id/virtual:chatgpt-widget-AnotherWidget.js");
+      expect(testWidgetHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-TestWidget.js");
+      expect(anotherWidgetHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-AnotherWidget.js");
     });
 
     it("should generate HTML even for non-existent widgets in dev mode", async () => {
@@ -65,7 +65,7 @@ describe("Basic Project Integration", () => {
       // The error only occurs when the JS module is loaded by the browser
       const { content: html } = await getWidgetHTML("NonExistentWidget", { devServer });
       expect(html).toContain("NonExistentWidget Widget");
-      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-NonExistentWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-NonExistentWidget.js");
     });
 
     it("should include all widgets in getWidgets result with content", async () => {
@@ -76,7 +76,7 @@ describe("Basic Project Integration", () => {
         expect(widget.filePath).toBeTruthy();
         expect(widget.content).toContain("<!DOCTYPE html>");
         expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
-        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
+        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-");
       }
     });
 
@@ -84,7 +84,7 @@ describe("Basic Project Integration", () => {
       const { content: html } = await getWidgetHTML("TestWidget", { devServer });
 
       // Extract the JavaScript module URL from the HTML
-      const scriptMatch = html.match(/src="([^"]+virtual:chatgpt-widget-TestWidget\.js[^"]*)"/);
+      const scriptMatch = html.match(/src="([^"]+virtual:chatgpt-widget-entrypoint-TestWidget\.js[^"]*)"/);
       expect(scriptMatch).toBeTruthy();
 
       const scriptUrl = scriptMatch![1].replace("https://example.com/@id/", "").replace("https://example.com/", "");
@@ -162,12 +162,12 @@ describe("Basic Project Integration", () => {
       const manifestContent = await fs.readFile(MANIFEST_PATH, "utf-8");
       const manifest = JSON.parse(manifestContent);
 
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-TestWidget.html");
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-AnotherWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-TestWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-AnotherWidget.html");
 
       // Verify the manifest entries point to actual files
-      expect(manifest["virtual:chatgpt-widget-TestWidget.html"].file).toBeTruthy();
-      expect(manifest["virtual:chatgpt-widget-AnotherWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-TestWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-AnotherWidget.html"].file).toBeTruthy();
     });
 
     it("should discover widgets in production mode", async () => {

@@ -71,10 +71,10 @@ describe("Root Layout Component", () => {
       const manifestContent = await fs.readFile(MANIFEST_WITH_ROOT_PATH, "utf-8");
       const manifest = JSON.parse(manifestContent);
 
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-WidgetA.html");
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-WidgetB.html");
-      expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-root.html");
-      expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-Root.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-WidgetA.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-WidgetB.html");
+      expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-html-root.html");
+      expect(manifest).not.toHaveProperty("virtual:chatgpt-widget-html-Root.html");
     });
 
     it("should discover widgets excluding root in production mode", async () => {

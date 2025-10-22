@@ -131,7 +131,7 @@ export async function getWidgetHTML(
 
   if (isViteDevServer) {
     const vite = viteHandle.devServer;
-    const virtualModuleId = `virtual:chatgpt-widget-${widgetName}.html`;
+    const virtualModuleId = `virtual:chatgpt-widget-html-${widgetName}.html`;
 
     // Step 1: Use plugin container to resolve and load the raw HTML from our plugin
     const resolved = await vite.pluginContainer.resolveId(virtualModuleId);
@@ -152,8 +152,8 @@ export async function getWidgetHTML(
     // Pass the virtual module ID as the URL so Vite knows the context
     const transformedHtml = await vite.transformIndexHtml(virtualModuleId, rawHtml);
 
-    // rewrite src="virtual:chatgpt-widget-${widgetName}.js" to src="/@id/virtual:chatgpt-widget-${widgetName}.js"
-    html = transformedHtml.replace(/src="virtual:chatgpt-widget-/g, `src="/@id/virtual:chatgpt-widget-`);
+    // rewrite src="virtual:chatgpt-widget-entrypoint-${widgetName}.js" to src="/@id/virtual:chatgpt-widget-entrypoint-${widgetName}.js"
+    html = transformedHtml.replace(/src="virtual:chatgpt-widget-entrypoint-/g, `src="/@id/virtual:chatgpt-widget-entrypoint-`);
 
     const plugin = vite.config.plugins.find((plugin) => plugin.name === PLUGIN_NAME) as ChatGPTWidgetPlugin;
     // Get explicit baseUrl from the plugin in the plugin options
@@ -210,7 +210,7 @@ export async function getWidgetHTML(
     const manifest = JSON.parse(manifestContent) as Record<string, { file: string }>;
 
     // Look for the widget HTML file in the manifest
-    const virtualModuleId = `virtual:chatgpt-widget-${widgetName}.html`;
+    const virtualModuleId = `virtual:chatgpt-widget-html-${widgetName}.html`;
     const manifestEntry = manifest[virtualModuleId];
 
     if (!manifestEntry) {
@@ -271,7 +271,7 @@ export function generateWidgetEntrypointHTML(widgetName: string): string {
   // Always use the virtual: protocol here
   // In dev mode, the MCP helper will rewrite this to /@id/virtual: after HTML transformation
   // In build mode, Vite will resolve and bundle this appropriately
-  const jsEntrypoint = `virtual:chatgpt-widget-${widgetName}.js`;
+  const jsEntrypoint = `virtual:chatgpt-widget-entrypoint-${widgetName}.js`;
 
   return `
 <!DOCTYPE html>
@@ -339,7 +339,7 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
       const widgetEntries: Record<string, string> = {};
 
       for (const file of files) {
-        widgetEntries[`chatgpt-widget-${file.name}`] = `virtual:chatgpt-widget-${file.name}.html`;
+        widgetEntries[`chatgpt-widget-${file.name}`] = `virtual:chatgpt-widget-html-${file.name}.html`;
       }
 
       // Add widget entries to existing input
@@ -362,11 +362,11 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
 
     resolveId(id) {
       // Handle virtual HTML entrypoint resolution
-      if (id.startsWith("virtual:chatgpt-widget-") && id.endsWith(".html")) {
+      if (id.startsWith("virtual:chatgpt-widget-html-") && id.endsWith(".html")) {
         return id;
       }
       // Handle virtual JS entrypoint resolution
-      if (id.startsWith("virtual:chatgpt-widget-") && id.endsWith(".js")) {
+      if (id.startsWith("virtual:chatgpt-widget-entrypoint-") && id.endsWith(".js")) {
         return "\0" + id;
       }
       return null;
@@ -374,14 +374,14 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
 
     async load(id) {
       // Handle virtual HTML files
-      if (id.startsWith("virtual:chatgpt-widget-") && id.endsWith(".html")) {
-        const widgetName = id.replace("virtual:chatgpt-widget-", "").replace(".html", "");
+      if (id.startsWith("virtual:chatgpt-widget-html-") && id.endsWith(".html")) {
+        const widgetName = id.replace("virtual:chatgpt-widget-html-", "").replace(".html", "");
         return generateWidgetEntrypointHTML(widgetName);
       }
 
       // Handle virtual JS entrypoints
-      if (id.startsWith("\0virtual:chatgpt-widget-") && id.endsWith(".js")) {
-        const widgetName = id.replace("\0virtual:chatgpt-widget-", "").replace(".js", "");
+      if (id.startsWith("\0virtual:chatgpt-widget-entrypoint-") && id.endsWith(".js")) {
+        const widgetName = id.replace("\0virtual:chatgpt-widget-entrypoint-", "").replace(".js", "");
 
         // Find the actual widget file
         const widgetsDirPath = path.resolve(config.root, widgetsDir);

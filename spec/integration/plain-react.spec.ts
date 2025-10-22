@@ -40,7 +40,7 @@ describe("Plain React (without React Router)", () => {
       expect(html).toContain("<title>CounterWidget Widget</title>");
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain('<script type="module"');
-      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-CounterWidget.js");
+      expect(html).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-CounterWidget.js");
     });
 
     it("should generate HTML for both plain React widgets", async () => {
@@ -50,8 +50,8 @@ describe("Plain React (without React Router)", () => {
       expect(counterHtml).toContain("CounterWidget Widget");
       expect(greetingHtml).toContain("GreetingWidget Widget");
 
-      expect(counterHtml).toContain("/@id/virtual:chatgpt-widget-CounterWidget.js");
-      expect(greetingHtml).toContain("/@id/virtual:chatgpt-widget-GreetingWidget.js");
+      expect(counterHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-CounterWidget.js");
+      expect(greetingHtml).toContain("/@id/virtual:chatgpt-widget-entrypoint-GreetingWidget.js");
     });
 
     it("should include all plain React widgets in getWidgets result", async () => {
@@ -62,7 +62,7 @@ describe("Plain React (without React Router)", () => {
         expect(widget.filePath).toBeTruthy();
         expect(widget.content).toContain("<!DOCTYPE html>");
         expect(widget.content).toContain(`<title>${widget.name} Widget</title>`);
-        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-");
+        expect(widget.content).toContain("https://example.com/@id/virtual:chatgpt-widget-entrypoint-");
       }
     });
 
@@ -120,11 +120,11 @@ describe("Plain React (without React Router)", () => {
       const manifestContent = await fs.readFile(MANIFEST_PLAIN_REACT_PATH, "utf-8");
       const manifest = JSON.parse(manifestContent);
 
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-CounterWidget.html");
-      expect(manifest).toHaveProperty("virtual:chatgpt-widget-GreetingWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-CounterWidget.html");
+      expect(manifest).toHaveProperty("virtual:chatgpt-widget-html-GreetingWidget.html");
 
-      expect(manifest["virtual:chatgpt-widget-CounterWidget.html"].file).toBeTruthy();
-      expect(manifest["virtual:chatgpt-widget-GreetingWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-CounterWidget.html"].file).toBeTruthy();
+      expect(manifest["virtual:chatgpt-widget-html-GreetingWidget.html"].file).toBeTruthy();
     });
 
     it("should discover plain React widgets in production mode", async () => {
@@ -152,7 +152,7 @@ describe("Plain React (without React Router)", () => {
       const manifestContent = await fs.readFile(MANIFEST_PLAIN_REACT_PATH, "utf-8");
       const manifest = JSON.parse(manifestContent);
 
-      const widgetEntries = Object.entries(manifest).filter(([key]) => key.startsWith("virtual:chatgpt-widget-"));
+      const widgetEntries = Object.entries(manifest).filter(([key]) => key.startsWith("virtual:chatgpt-widget-html-"));
 
       for (const [, entry] of widgetEntries) {
         const filePath = path.join(BUILD_PLAIN_REACT_DIR, (entry as any).file);
