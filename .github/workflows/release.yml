@@ -18,6 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/setup-test-env
+      - name: Build
+        run: pnpm build
       - id: npm-publish
         name: Publish to npm
         uses: JS-DevTools/npm-publish@v4
