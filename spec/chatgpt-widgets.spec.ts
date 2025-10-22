@@ -16,12 +16,12 @@ describe("vite-plugin-chatgpt-widgets", () => {
       expect(html).toContain('<meta charset="UTF-8" />');
       expect(html).toContain("<title>TestWidget Widget</title>");
       expect(html).toContain('<div id="root"></div>');
-      expect(html).toContain('<script type="module" src="virtual:chatgpt-widget-TestWidget.js"></script>');
+      expect(html).toContain('<script type="module" src="virtual:chatgpt-widget-entrypoint-TestWidget.js"></script>');
     });
 
     it("should use virtual: protocol for the script src", () => {
       const html = generateWidgetEntrypointHTML("MyWidget");
-      expect(html).toContain('src="virtual:chatgpt-widget-MyWidget.js"');
+      expect(html).toContain('src="virtual:chatgpt-widget-entrypoint-MyWidget.js"');
     });
 
     it("should properly escape widget names in titles", () => {
@@ -34,15 +34,15 @@ describe("vite-plugin-chatgpt-widgets", () => {
     it("should resolve virtual HTML entrypoints", () => {
       const plugin = chatGPTWidgetPlugin();
 
-      const result = (plugin as any).resolveId("virtual:chatgpt-widget-Test.html");
-      expect(result).toBe("virtual:chatgpt-widget-Test.html");
+      const result = (plugin as any).resolveId("virtual:chatgpt-widget-html-Test.html");
+      expect(result).toBe("virtual:chatgpt-widget-html-Test.html");
     });
 
     it("should resolve virtual JS entrypoints with null byte prefix", () => {
       const plugin = chatGPTWidgetPlugin();
 
-      const result = (plugin as any).resolveId("virtual:chatgpt-widget-Test.js");
-      expect(result).toBe("\0virtual:chatgpt-widget-Test.js");
+      const result = (plugin as any).resolveId("virtual:chatgpt-widget-entrypoint-Test.js");
+      expect(result).toBe("\0virtual:chatgpt-widget-entrypoint-Test.js");
     });
 
     it("should return null for non-virtual modules", () => {
@@ -56,8 +56,8 @@ describe("vite-plugin-chatgpt-widgets", () => {
       const plugin = chatGPTWidgetPlugin();
 
       expect((plugin as any).resolveId("virtual:chatgpt-widget")).toBeNull();
-      expect((plugin as any).resolveId("chatgpt-widget-Test.html")).toBeNull();
-      expect((plugin as any).resolveId("virtual:chatgpt-widget-Test.css")).toBeNull();
+      expect((plugin as any).resolveId("chatgpt-widget-html-Test.html")).toBeNull();
+      expect((plugin as any).resolveId("virtual:chatgpt-widget-entrypoint-Test.css")).toBeNull();
     });
   });
 
@@ -65,7 +65,7 @@ describe("vite-plugin-chatgpt-widgets", () => {
     it("should load virtual HTML files using generateWidgetEntrypointHTML", async () => {
       const plugin = chatGPTWidgetPlugin();
 
-      const result = await (plugin as any).load("virtual:chatgpt-widget-TestWidget.html");
+      const result = await (plugin as any).load("virtual:chatgpt-widget-html-TestWidget.html");
 
       // Should use the same HTML generation function
       const expected = generateWidgetEntrypointHTML("TestWidget");
@@ -83,7 +83,7 @@ describe("vite-plugin-chatgpt-widgets", () => {
       const plugin = chatGPTWidgetPlugin();
 
       expect(await (plugin as any).load("virtual:other-module")).toBeNull();
-      expect(await (plugin as any).load("virtual:chatgpt-widget-Test.css")).toBeNull();
+      expect(await (plugin as any).load("virtual:chatgpt-widget-entrypoint-Test.js")).toBeNull();
     });
   });
 
