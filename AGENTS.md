@@ -44,7 +44,7 @@ This plugin solves these problems by:
 
 ```
 your-project/
-├── web/chatgpt-widgets/          # Widget components directory (configurable)
+├── web/chatgpt/                  # Widget components directory (configurable)
 │   ├── root.tsx                  # Optional: Root layout wrapper for all widgets
 │   ├── MyWidget.tsx              # Individual widget components
 │   └── AnotherWidget.tsx
@@ -126,8 +126,8 @@ import { getWidgets } from "vite-plugin-chatgpt-widgets";
 // Determine mode and get widgets
 const widgets =
   process.env.NODE_ENV === "production"
-    ? await getWidgets("web/chatgpt-widgets", { manifestPath: "dist/.vite/manifest.json" })
-    : await getWidgets("web/chatgpt-widgets", { devServer: viteDevServerInstance });
+    ? await getWidgets("web/chatgpt", { manifestPath: "dist/.vite/manifest.json" })
+    : await getWidgets("web/chatgpt", { devServer: viteDevServerInstance });
 
 // Register each as an MCP resource
 for (const widget of widgets) {
@@ -153,7 +153,7 @@ for (const widget of widgets) {
 ### Widget Component Pattern
 
 ```tsx
-// web/chatgpt-widgets/DataDisplay.tsx
+// web/chatgpt/DataDisplay.tsx
 export default function DataDisplay() {
   // Access tool output from ChatGPT
   const data = window.openai?.tool_output;
@@ -165,7 +165,7 @@ export default function DataDisplay() {
 ### Root Layout Pattern
 
 ```tsx
-// web/chatgpt-widgets/root.tsx
+// web/chatgpt/root.tsx
 import { ThemeProvider } from "./theme";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
