@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import * as fsSync from "fs";
 import * as path from "path";
 import type { Plugin as VitePlugin, ResolvedConfig, ViteDevServer } from "vite";
 
@@ -302,7 +303,17 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
     config(config) {
       // Store the root for use in the options hook
       viteRoot = config.root || process.cwd();
-      return null;
+
+      // Conditionally include @gadgetinc/react-chatgpt-apps in optimizeDeps if it's installed
+      const gadgetPackage = "@gadgetinc/react-chatgpt-apps";
+      const packagePath = path.resolve(viteRoot, "node_modules", gadgetPackage);
+      const hasGadgetPackage = fsSync.existsSync(packagePath);
+
+      return {
+        optimizeDeps: {
+          include: hasGadgetPackage ? [gadgetPackage] : [],
+        },
+      };
     },
 
     configResolved(resolvedConfig: ResolvedConfig) {
