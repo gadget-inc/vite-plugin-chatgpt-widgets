@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { chatGPTWidgetPlugin, generateWidgetEntrypointHTML, getWidgetHTML } from "../src/index.js";
 import type { ViteDevServer } from "vite";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Unit tests focusing on pure functions and important logic
@@ -208,6 +210,132 @@ describe("vite-plugin-chatgpt-widgets", () => {
       // Plugin baseUrl should be used, not Vite base
       expect(result.content).toContain("https://plugin-option.com/");
       expect(result.content).not.toContain("https://vite-config.com/");
+    });
+  });
+
+  describe("chatGPTWidgetPlugin - config hook optimizeDeps", () => {
+    let tempDir: string;
+    let originalCwd: string;
+
+    beforeEach(() => {
+      // Save original cwd
+      originalCwd = process.cwd();
+      // Create a temporary directory for testing
+      tempDir = path.join(process.cwd(), "spec", "fixtures", "temp-test-dir");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+    });
+
+    afterEach(() => {
+      // Restore original cwd
+      process.chdir(originalCwd);
+      // Clean up temp directory
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("should include @gadgetinc/react-chatgpt-apps in optimizeDeps when package exists", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Create a mock node_modules/@gadgetinc/react-chatgpt-apps directory
+      const nodeModulesDir = path.join(tempDir, "node_modules", "@gadgetinc", "react-chatgpt-apps");
+      fs.mkdirSync(nodeModulesDir, { recursive: true });
+      fs.writeFileSync(path.join(nodeModulesDir, "package.json"), JSON.stringify({ name: "@gadgetinc/react-chatgpt-apps" }));
+
+      // Call config hook with temp directory as root
+      const result = (plugin as any).config({ root: tempDir });
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual(["@gadgetinc/react-chatgpt-apps"]);
+    });
+
+    it("should not include @gadgetinc/react-chatgpt-apps in optimizeDeps when package does not exist", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Call config hook with temp directory (no node_modules created)
+      const result = (plugin as any).config({ root: tempDir });
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual([]);
+    });
+
+    it("should use process.cwd() when no root is provided", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Change to temp directory
+      process.chdir(tempDir);
+
+      // Create node_modules in temp directory
+      const nodeModulesDir = path.join(tempDir, "node_modules", "@gadgetinc", "react-chatgpt-apps");
+      fs.mkdirSync(nodeModulesDir, { recursive: true });
+      fs.writeFileSync(path.join(nodeModulesDir, "package.json"), JSON.stringify({ name: "@gadgetinc/react-chatgpt-apps" }));
+
+      // Call config hook without root (should use process.cwd())
+      const result = (plugin as any).config({});
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual(["@gadgetinc/react-chatgpt-apps"]);
+    });
+
+    it("should return empty array when node_modules exists but package is not installed", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Create node_modules but without the specific package
+      const nodeModulesDir = path.join(tempDir, "node_modules");
+      fs.mkdirSync(nodeModulesDir, { recursive: true });
+      // Add some other package
+      const otherPackageDir = path.join(nodeModulesDir, "some-other-package");
+      fs.mkdirSync(otherPackageDir);
+      fs.writeFileSync(path.join(otherPackageDir, "package.json"), JSON.stringify({ name: "some-other-package" }));
+
+      const result = (plugin as any).config({ root: tempDir });
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual([]);
+    });
+
+    it("should handle scoped package directory structure correctly", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Create the full scoped package structure: node_modules/@gadgetinc/react-chatgpt-apps
+      const scopeDir = path.join(tempDir, "node_modules", "@gadgetinc");
+      fs.mkdirSync(scopeDir, { recursive: true });
+
+      // Create the package directory
+      const packageDir = path.join(scopeDir, "react-chatgpt-apps");
+      fs.mkdirSync(packageDir);
+      fs.writeFileSync(path.join(packageDir, "package.json"), JSON.stringify({ name: "@gadgetinc/react-chatgpt-apps" }));
+
+      const result = (plugin as any).config({ root: tempDir });
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual(["@gadgetinc/react-chatgpt-apps"]);
+    });
+
+    it("should work with nested project structures", () => {
+      const plugin = chatGPTWidgetPlugin();
+
+      // Create a nested project structure
+      const nestedProjectDir = path.join(tempDir, "apps", "my-app");
+      fs.mkdirSync(nestedProjectDir, { recursive: true });
+
+      // Create node_modules in the nested directory
+      const nodeModulesDir = path.join(nestedProjectDir, "node_modules", "@gadgetinc", "react-chatgpt-apps");
+      fs.mkdirSync(nodeModulesDir, { recursive: true });
+      fs.writeFileSync(path.join(nodeModulesDir, "package.json"), JSON.stringify({ name: "@gadgetinc/react-chatgpt-apps" }));
+
+      const result = (plugin as any).config({ root: nestedProjectDir });
+
+      expect(result).toBeDefined();
+      expect(result.optimizeDeps).toBeDefined();
+      expect(result.optimizeDeps.include).toEqual(["@gadgetinc/react-chatgpt-apps"]);
     });
   });
 });
