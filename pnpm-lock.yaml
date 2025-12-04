@@ -35,10 +35,10 @@ importers:
         version: 5.1.1
       gitpkg:
         specifier: github:airhorns/gitpkg#gitpkg-v1.0.0-beta.4-gitpkg-82083c3
-        version: https://codeload.github.com/airhorns/gitpkg/tar.gz/237843a1494a2c815ef48bd3d345c725f5ae9495
+        version: git+https://git@github.com:airhorns/gitpkg.git#237843a1494a2c815ef48bd3d345c725f5ae9495
       playwright:
-        specifier: 1.54.1
-        version: 1.54.1
+        specifier: 1.55.1
+        version: 1.55.1
       prettier:
         specifier: ^2.8.8
         version: 2.8.8
@@ -1610,8 +1610,8 @@ packages:
   gitconfiglocal@2.1.0:
     resolution: {integrity: sha512-qoerOEliJn3z+Zyn1HW2F6eoYJqKwS6MgC9cztTLUB/xLWX8gD/6T60pKn4+t/d6tP7JlybI7Z3z+I572CR/Vg==}
 
-  gitpkg@https://codeload.github.com/airhorns/gitpkg/tar.gz/237843a1494a2c815ef48bd3d345c725f5ae9495:
-    resolution: {tarball: https://codeload.github.com/airhorns/gitpkg/tar.gz/237843a1494a2c815ef48bd3d345c725f5ae9495}
+  gitpkg@git+https://git@github.com:airhorns/gitpkg.git#237843a1494a2c815ef48bd3d345c725f5ae9495:
+    resolution: {commit: 237843a1494a2c815ef48bd3d345c725f5ae9495, repo: git@github.com:airhorns/gitpkg.git, type: git}
     version: 1.0.0-beta.4
     engines: {node: '>=10.12.0'}
     hasBin: true
@@ -2238,13 +2238,13 @@ packages:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
 
-  playwright-core@1.54.1:
-    resolution: {integrity: sha512-Nbjs2zjj0htNhzgiy5wu+3w09YetDx5pkrpI/kZotDlDUaYk0HVA5xrBVPdow4SAUIlhgKcJeJg4GRKW6xHusA==}
+  playwright-core@1.55.1:
+    resolution: {integrity: sha512-Z6Mh9mkwX+zxSlHqdr5AOcJnfp+xUWLCt9uKV18fhzA8eyxUd8NUWzAjxUh55RZKSYwDGX0cfaySdhZJGMoJ+w==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.54.1:
-    resolution: {integrity: sha512-peWpSwIBmSLi6aW2auvrUtf2DqY16YYcCMO8rTVx486jKmDTJg7UAhyrraP98GB8BoPURZP8+nxO7TSd4cPr5g==}
+  playwright@1.55.1:
+    resolution: {integrity: sha512-cJW4Xd/G3v5ovXtJJ52MAOclqeac9S/aGGgRzLabuF8TnIb6xHvMzKIa6JmrRzUkeXJgfL1MhukP0NK6l39h3A==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -4588,7 +4588,7 @@ snapshots:
     dependencies:
       ini: 1.3.8
 
-  gitpkg@https://codeload.github.com/airhorns/gitpkg/tar.gz/237843a1494a2c815ef48bd3d345c725f5ae9495:
+  gitpkg@git+https://git@github.com:airhorns/gitpkg.git#237843a1494a2c815ef48bd3d345c725f5ae9495:
     dependencies:
       bluebird: 3.7.2
       chalk: 4.1.2
@@ -5206,11 +5206,11 @@ snapshots:
 
   pirates@4.0.7: {}
 
-  playwright-core@1.54.1: {}
+  playwright-core@1.55.1: {}
 
-  playwright@1.54.1:
+  playwright@1.55.1:
     dependencies:
-      playwright-core: 1.54.1
+      playwright-core: 1.55.1
     optionalDependencies:
       fsevents: 2.3.2
 
