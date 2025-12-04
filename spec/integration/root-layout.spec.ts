@@ -114,4 +114,106 @@ describe("Root Layout Component", () => {
       expect(jsContent.length).toBeGreaterThan(100);
     });
   });
+
+  describe("Browser CSS Order Tests", () => {
+    let devServer: ViteDevServer;
+
+    beforeAll(async () => {
+      devServer = await createServer({
+        root: FIXTURE_WITH_ROOT_DIR,
+        configFile: path.join(FIXTURE_WITH_ROOT_DIR, "vite.config.ts"),
+        server: {
+          port: 5177,
+        },
+        logLevel: "warn",
+      });
+      await devServer.listen();
+    });
+
+    afterAll(async () => {
+      await devServer?.close();
+    });
+
+    it("should inject root layout styles before widget styles in the browser", async () => {
+      const { content: html } = await getWidgetHTML("WidgetA", { devServer });
+
+      // Write the HTML to a temp file for serving
+      const tempHtmlPath = path.join(BUILD_WITH_ROOT_DIR, "test-css-order.html");
+      // Replace absolute URLs to point to our dev server
+      const localHtml = html.replace(/https:\/\/example\.com\//g, "http://localhost:5177/");
+      await fs.writeFile(tempHtmlPath, localHtml);
+
+      // Create a simple HTTP server to serve the HTML file
+      const { createServer: createHttpServer } = await import("http");
+      const { readFile: fsReadFile } = await import("fs/promises");
+
+      const server = createHttpServer((req, res) => {
+        void (async () => {
+          try {
+            const content = await fsReadFile(tempHtmlPath);
+            res.writeHead(200, {
+              "Content-Type": "text/html",
+              "Access-Control-Allow-Origin": "*",
+            });
+            res.end(content);
+          } catch {
+            res.writeHead(404);
+            res.end("Not found");
+          }
+        })();
+      });
+
+      const port = 5178;
+      await new Promise<void>((resolve) => {
+        server.listen(port, resolve);
+      });
+
+      try {
+        const { chromium } = await import("playwright");
+        const browser = await chromium.launch();
+        const page = await browser.newPage();
+
+        await page.goto(`http://localhost:${port}/`, { waitUntil: "networkidle" });
+        // Wait for styles to be injected
+        await page.waitForTimeout(2000);
+
+        const html = await page.content();
+        console.log(html);
+        // Get all style tags from the document head, extracting their content
+        const styleContents = await page.evaluate(() => {
+          const styles = document.querySelectorAll("head style");
+          return Array.from(styles).map((style) => style.textContent || "");
+        });
+
+        await browser.close();
+
+        // Find which style tag contains root styles vs widget styles
+        let rootStyleIndex = -1;
+        let widgetStyleIndex = -1;
+
+        for (let i = 0; i < styleContents.length; i++) {
+          const content = styleContents[i];
+          if (content.includes(".root-layout") && rootStyleIndex === -1) {
+            rootStyleIndex = i;
+          }
+          if (content.includes(".widget-a") && widgetStyleIndex === -1) {
+            widgetStyleIndex = i;
+          }
+        }
+
+        // Verify both styles were found
+        expect(rootStyleIndex).toBeGreaterThan(-1);
+        expect(widgetStyleIndex).toBeGreaterThan(-1);
+
+        // Root layout styles should be injected BEFORE widget styles
+        // This ensures proper CSS cascade - widget styles can override root styles
+        expect(rootStyleIndex).toBeLessThan(widgetStyleIndex);
+      } finally {
+        server.close();
+        await fs.unlink(tempHtmlPath).catch(() => {
+          // ignore
+        });
+      }
+    });
+  });
 });

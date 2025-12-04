@@ -1,0 +1,16 @@
+/* Widget styles - should be loaded after root styles */
+.widget-a {
+  background-color: #e0e0ff;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.widget-a h2 {
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.widget-a p {
+  color: #666;
+}
+
