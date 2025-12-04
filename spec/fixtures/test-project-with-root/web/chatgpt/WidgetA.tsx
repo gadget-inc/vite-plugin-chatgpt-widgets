@@ -1,3 +1,5 @@
+import "./widget.css";
+
 export default function WidgetA() {
   return (
     <div className="widget-a">

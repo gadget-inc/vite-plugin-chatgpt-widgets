@@ -437,8 +437,8 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
           return `
 ${hmrRuntimeSetup}import React from 'react';
 import { createRoot } from 'react-dom/client';
-import Widget from '${widgetFile}';
 import RootLayout from '${rootFile}';
+import Widget from '${widgetFile}';
 
 const container = document.getElementById('root');
 if (!container) {

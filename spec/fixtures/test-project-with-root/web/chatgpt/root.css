@@ -1,0 +1,23 @@
+/* Root layout styles - should be loaded first */
+.root-layout {
+  font-family: system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.root-header {
+  background-color: #f0f0f0;
+  padding: 1rem;
+}
+
+.root-content {
+  flex: 1;
+  padding: 1rem;
+}
+
+.root-footer {
+  background-color: #f0f0f0;
+  padding: 1rem;
+}
+
