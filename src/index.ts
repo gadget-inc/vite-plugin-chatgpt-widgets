@@ -312,6 +312,7 @@ export function chatGPTWidgetPlugin(options: ChatGPTWidgetPluginOptions = {}): C
       return {
         optimizeDeps: {
           include: hasGadgetPackage ? [gadgetPackage] : [],
+          entries: `${widgetsDir}/**/*.{jsx,tsx}`,
         },
       };
     },
